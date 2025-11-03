@@ -70,7 +70,7 @@ def map_boxes_to_original(boxes: List[BBox], scale: float) -> List[BBox]:
         ))
     return mapped
 
-# default num_to_show should be all boxes
+
 def visualize_boxes(img: np.ndarray, boxes: List[BBox], num_to_show: int = None):
     """Draw bounding boxes on the image."""
     vis = img.copy()
@@ -90,6 +90,36 @@ def visualize_boxes(img: np.ndarray, boxes: List[BBox], num_to_show: int = None)
         legend[:, x] = [int(255 * c[2]), int(255 * c[1]), int(255 * c[0])]
     vis = np.vstack([vis, legend])
     return vis
+
+
+def warp_region(
+    image: np.ndarray,
+    box: Tuple[int, int, int, int],
+    output_size: Tuple[int, int] = (227, 227),
+    context: int = 16
+) -> np.ndarray:
+    """Warp an image region (proposal) to a fixed size (e.g. 227x227), with context padding as used in R-CNN."""
+
+    H, W = image.shape[:2]
+    x, y, w, h = box
+
+    # Expand box by context pixels (p = 16 recommended)
+    x0 = max(0, x - context)
+    y0 = max(0, y - context)
+    x1 = min(W, x + w + context)
+    y1 = min(H, y + h + context)
+
+    # Crop region with padding
+    crop = image[y0:y1, x0:x1]
+
+    # If the crop is empty (shouldn’t happen, but just in case)
+    if crop.size == 0:
+        crop = np.zeros((output_size[1], output_size[0], 3), dtype=np.uint8)
+
+    # Resize (warp) to fixed CNN input size
+    warped = cv2.resize(crop, output_size, interpolation=cv2.INTER_LINEAR)
+
+    return warped
 
 
 # ---------- Main Pipeline ----------
@@ -124,40 +154,6 @@ def selective_search_rcnn_pipeline(image_path: str,
     print("[INFO] Saved visualization as proposals_visualized_original.jpg")
 
     return boxes_original
-
-import cv2
-import numpy as np
-from typing import Tuple
-
-def warp_region(
-    image: np.ndarray,
-    box: Tuple[int, int, int, int],
-    output_size: Tuple[int, int] = (227, 227),
-    context: int = 16
-) -> np.ndarray:
-    """Warp an image region (proposal) to a fixed size (e.g. 227x227), with context padding as used in R-CNN."""
-
-    H, W = image.shape[:2]
-    x, y, w, h = box
-
-    # Expand box by context pixels (p = 16 recommended)
-    x0 = max(0, x - context)
-    y0 = max(0, y - context)
-    x1 = min(W, x + w + context)
-    y1 = min(H, y + h + context)
-
-    # Crop region with padding
-    crop = image[y0:y1, x0:x1]
-
-    # If the crop is empty (shouldn’t happen, but just in case)
-    if crop.size == 0:
-        crop = np.zeros((output_size[1], output_size[0], 3), dtype=np.uint8)
-
-    # Resize (warp) to fixed CNN input size
-    warped = cv2.resize(crop, output_size, interpolation=cv2.INTER_LINEAR)
-
-    return warped
-
 
 # ---------- Run Example ----------
 if __name__ == "__main__":
