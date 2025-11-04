@@ -25,8 +25,12 @@ pip install -r requirements.txt
 
 ### Dataset Setup
 
-Download from [Kaggle AgroPest-12 Dataset](https://www.kaggle.com/datasets/rupankarmajumdar/crop-pests-dataset)
-
+- Download the dataset from [Kaggle: AgroPest-12 Dataset](https://www.kaggle.com/datasets/rupankarmajumdar/crop-pests-dataset).
+- Labels are provided in YOLO format:
+  - Each label line follows: `class_id x_center y_center width height`
+  - All values are normalized between 0 and 1, where:
+    - `x_center` and `y_center` represent the center of the bounding box (as a fraction of image width and height, respectively).
+    - `width` and `height` are the size of the bounding box (as a fraction of image width and height).
 
 ## Quick Start
 

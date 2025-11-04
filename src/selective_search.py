@@ -11,9 +11,11 @@ Requirements:
   pip install opencv-contrib-python numpy
 """
 
+import os
 import cv2
 import numpy as np
 from typing import List, Tuple
+import matplotlib.pyplot as plt
 import matplotlib.cm as cm  # for color maps
 
 BBox = Tuple[int, int, int, int]  # (x, y, w, h)
@@ -32,7 +34,9 @@ def resize_keep_aspect(img: np.ndarray, target_width: int = 500) -> Tuple[np.nda
 
 
 def run_selective_search(img: np.ndarray, mode: str = "fast") -> List[BBox]:
-    """Run OpenCV Selective Search on an image."""
+    """Run OpenCV Selective Search on an image.
+    Output boxes are in the format of (x, y, w, h) where x, y are the top-left corner of the box, w, h are the width and height of the box.
+    """
     if not hasattr(cv2, "ximgproc"):
         raise RuntimeError("You need OpenCV contrib. Install with: pip install opencv-contrib-python")
 
@@ -127,16 +131,20 @@ def warp_region(
 def selective_search_rcnn_pipeline(image_path: str,
                                    target_width: int = 500,
                                    mode: str = "fast",
-                                   num_show: int = 100):
+                                   max_boxes: int = 2000,
+                                   visualize: bool = False,
+                                   save_visualization_path: str = None,
+                                   save_boxes_path: str = None):
     """Run selective search, rescale boxes to original size, and visualize."""
     img = cv2.imread(image_path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     if img is None:
         raise ValueError(f"Cannot read image: {image_path}")
 
     print("[INFO] Running Selective Search ...")
     resized, scale = resize_keep_aspect(img, target_width)
     boxes_resized = run_selective_search(resized, mode=mode)
-    boxes_resized = filter_boxes(boxes_resized, min_size=20, max_boxes=2000)
+    boxes_resized = filter_boxes(boxes_resized, min_size=20, max_boxes=max_boxes)
     print(f"[INFO] Got {len(boxes_resized)} region proposals on resized image.")
 
     # Map back to original coordinates
@@ -144,23 +152,17 @@ def selective_search_rcnn_pipeline(image_path: str,
     print("[INFO] Boxes mapped back to original image coordinates.")
 
     # Visualize on original image
-    vis = visualize_boxes(img, boxes_original, num_to_show=num_show)
-
-    cv2.imshow("Selective Search Proposals (Original Image)", vis)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-    cv2.imwrite("proposals_visualized_original.jpg", vis)
-    print("[INFO] Saved visualization as proposals_visualized_original.jpg")
-
+    vis = visualize_boxes(img, boxes_original)
+    if visualize:
+        plt.imshow(vis)
+        plt.show()
+    if save_visualization_path:
+        cv2.imwrite(save_visualization_path, vis)
+        print(f"[INFO] Saved visualization as {save_visualization_path}")
+    if save_boxes_path: # given .txt file path, save the boxes to the file
+        os.makedirs(os.path.dirname(save_boxes_path), exist_ok=True)
+        with open(save_boxes_path, "w") as f:
+            for box in boxes_original:
+                f.write(f"{box[0]} {box[1]} {box[2]} {box[3]}\n")
+        print(f"[INFO] Saved boxes as {save_boxes_path}")
     return boxes_original
-
-# ---------- Run Example ----------
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) < 2:
-        print("Usage: python rcnn_selective_search_visualize_scaled.py <image_path>")
-        sys.exit(1)
-
-    image_path = sys.argv[1]
-    selective_search_rcnn_pipeline(image_path, target_width=500, mode="fast", num_show=100)
