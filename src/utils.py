@@ -2,6 +2,20 @@ import os
 import numpy as np
 from typing import Dict, List, Tuple
 
+CLASS_TO_ID = {
+    "Ants": 0,
+    "Bees": 1,
+    "Beetles": 2,
+    "Caterpillars": 3,
+    "Earthworms": 4,
+    "Earwigs": 5,
+    "Grasshoppers": 6,
+    "Moths": 7,
+    "Slugs": 8,
+    "Snails": 9,
+    "Wasps": 10,
+    "Weevils": 11,
+}
 BBox = Tuple[float, float, float, float]  # IoU format (x_min, y_min, x_max, y_max)
 
 def load_label_data(dir, max_samples=None):
