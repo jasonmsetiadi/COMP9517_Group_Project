@@ -1,5 +1,7 @@
+"""script to prepare the training set for the model"""
 import os
 import sys
+from datetime import datetime
 
 # Add project root to Python path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -46,7 +48,7 @@ def positive_bbox_sampling(image, labels, class_id):
             positive_samples.append(pos_box)
     return positive_samples
 
-def get_training_data(data, class_id, save=True):
+def get_training_data(data, class_id, region_size=(96, 96), save=True):
     X, y = [], []
     num_pos, num_neg = 0, 0
 
@@ -58,7 +60,7 @@ def get_training_data(data, class_id, save=True):
         pos_boxes = positive_bbox_sampling(img, bboxes, class_id)
         num_pos += len(pos_boxes)
         for pos_box in pos_boxes:
-            warp = warp_region(img, pos_box, output_size=(224, 224))
+            warp = warp_region(img, pos_box, output_size=region_size)
             features = extract_features(warp)
             X.append(features)
             y.append(1)
@@ -67,7 +69,7 @@ def get_training_data(data, class_id, save=True):
         neg_boxes = negative_bbox_random_sampling(img_path, class_id, len(pos_boxes))
         num_neg += len(neg_boxes)
         for neg_box in neg_boxes:
-            warp = warp_region(img, neg_box, output_size=(224, 224))
+            warp = warp_region(img, neg_box, output_size=region_size)
             features = extract_features(warp)
             X.append(features)
             y.append(0)
@@ -78,7 +80,7 @@ def get_training_data(data, class_id, save=True):
     # save the training data
     X, y = np.array(X), np.array(y)
     if save:
-        dir = f"training_data/{class_id}"
+        dir = os.path.join(RUN_DIR, f"class_{class_id}")
         if not os.path.exists(dir):
             os.makedirs(dir)
         np.save(os.path.join(dir, "data.npy"), X)
@@ -88,6 +90,10 @@ def get_training_data(data, class_id, save=True):
 
 
 if __name__ == "__main__":
+    # define path for the run
+    time_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    RUN_DIR = os.path.join(PROJECT_ROOT, 'runs', f'run_{time_stamp}')
+
     data = load_label_data(TRAIN_DATA_DIR)
     for class_name, class_id in CLASS_TO_ID.items():
         print(f"Preparing training data for {class_name} class (ID: {class_id})")
