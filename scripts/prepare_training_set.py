@@ -92,7 +92,7 @@ def get_training_data(data, class_id, region_size=(96, 96), save=True):
 if __name__ == "__main__":
     # define path for the run
     time_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    RUN_DIR = os.path.join(PROJECT_ROOT, 'runs', f'run_{time_stamp}')
+    RUN_DIR = os.path.join(PROJECT_ROOT, 'runs', f'run_{time_stamp}', 'classes')
 
     data = load_label_data(TRAIN_DATA_DIR)
     for class_name, class_id in CLASS_TO_ID.items():

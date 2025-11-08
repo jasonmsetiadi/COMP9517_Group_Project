@@ -37,7 +37,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_id = args.run_id
-    RUN_DIR = os.path.join(PROJECT_ROOT, 'runs', f'run_{run_id}')
+    RUN_DIR = os.path.join(PROJECT_ROOT, 'runs', f'run_{run_id}', 'classes')
 
     # load training data
     for class_id in CLASS_TO_ID.values():
