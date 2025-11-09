@@ -1,128 +1,135 @@
-# train_efficientdet.py
-
+"""
+Training script for EfficientDet
+"""
 import torch
+import torch.optim as optim
 from torch.utils.data import DataLoader
-import argparse
-from preprocess_dataset import YoloDetDataset, collate_fn
-from torchmetrics.detection import MeanAveragePrecision
 from tqdm import tqdm
+import os
 
-# --- NEW IMPORTS ---
-from effdet import create_model, get_efficientdet_config
-from effdet.loss import DetectionLoss
-from effdet.anchors import Anchors
-# -------------------
+import config
+from dataset import YOLODataset, collate_fn
+from model import create_model, save_checkpoint
 
-def train(args):
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # --- Setup Config, Anchors, and Loss ---
-    config = get_efficientdet_config('tf_efficientdet_d0')
-    config.num_classes = args.num_classes
-    config.image_size = (args.img_size, args.img_size)
+def train_epoch(model, dataloader, optimizer, device, accum_steps=4):
+    """Train for one epoch with gradient accumulation"""
+    model.train()
+    total_loss = 0
+    optimizer.zero_grad()
     
-    anchors = Anchors.from_config(config).to(device)
-    loss_fn = DetectionLoss(config).to(device)
-    # ---------------------------------------
-
-    train_ds = YoloDetDataset(args.train_root, img_size=args.img_size, is_train=True, num_classes=args.num_classes)
-    val_ds = YoloDetDataset(args.val_root, img_size=args.img_size, is_train=False, num_classes=args.num_classes)
-
-    train_loader = DataLoader(train_ds, batch_size=args.bs, shuffle=True, collate_fn=collate_fn, num_workers=0)
-    val_loader = DataLoader(val_ds, batch_size=args.bs * 2, shuffle=False, collate_fn=collate_fn, num_workers=0)
+    for idx, (images, targets) in enumerate(tqdm(dataloader, desc="Training")):
+        images = images.to(device)
+        
+        # Convert targets to the format expected by DetBenchTrain
+        batch_target = {
+            'bbox': [],
+            'cls': [],
+            'img_scale': [],
+            'img_size': []
+        }
+        
+        for t in targets:
+            batch_target['bbox'].append(t['bbox'].to(device))
+            batch_target['cls'].append(t['cls'].to(device))
+            batch_target['img_scale'].append(t['img_scale'].to(device))
+            batch_target['img_size'].append(t['img_size'].to(device))
+        
+        loss_dict = model(images, batch_target)
+        loss = loss_dict['loss'] / accum_steps  # Scale loss
+        loss.backward()
+        
+        # Update weights every accum_steps
+        if (idx + 1) % accum_steps == 0:
+            optimizer.step()
+            optimizer.zero_grad()
+        
+        total_loss += loss.item() * accum_steps
     
-    model = create_model(
-        'tf_efficientdet_d0',
-        pretrained=True,
-        num_classes=args.num_classes,
-        bench_task=None,  # <-- CRITICAL: Do NOT use the bench_task wrapper
-        config=config     # <-- Pass the config
-    ).to(device)
+    # Final update if needed
+    if len(dataloader) % accum_steps != 0:
+        optimizer.step()
+        optimizer.zero_grad()
+    
+    return total_loss / len(dataloader)
 
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr)
-    metric = MeanAveragePrecision(box_format='xyxy').to(device)
-    best_map = 0.0
 
-    for epoch in range(args.epochs):
-        model.train()
-        train_loss = 0.0
+def validate(model, dataloader, device):
+    """Validate model"""
+    model.train()  # Keep in train mode for loss computation
+    total_loss = 0
+    
+    with torch.no_grad():
+        for images, targets in tqdm(dataloader, desc="Validation"):
+            images = images.to(device)
+            
+            # Convert targets to the format expected by DetBenchTrain
+            batch_target = {
+                'bbox': [],
+                'cls': [],
+                'img_scale': [],
+                'img_size': []
+            }
+            
+            for t in targets:
+                batch_target['bbox'].append(t['bbox'].to(device))
+                batch_target['cls'].append(t['cls'].to(device))
+                batch_target['img_scale'].append(t['img_scale'].to(device))
+                batch_target['img_size'].append(t['img_size'].to(device))
+            
+            loss_dict = model(images, batch_target)
+            loss = loss_dict['loss']
+            total_loss += loss.item()
+    
+    return total_loss / len(dataloader)
+
+
+def main():
+    device = torch.device(config.DEVICE)
+    print(f"Using device: {device}")
+    
+    # Create datasets
+    train_dataset = YOLODataset(config.TRAIN_IMAGES, config.TRAIN_LABELS, 
+                                config.IMAGE_SIZE, augment=True)
+    valid_dataset = YOLODataset(config.VALID_IMAGES, config.VALID_LABELS, 
+                                config.IMAGE_SIZE, augment=False)
+    
+    train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, 
+                             shuffle=True, collate_fn=collate_fn, 
+                             num_workers=config.NUM_WORKERS)
+    valid_loader = DataLoader(valid_dataset, batch_size=config.BATCH_SIZE, 
+                             shuffle=False, collate_fn=collate_fn, 
+                             num_workers=config.NUM_WORKERS)
+    
+    print(f"Train: {len(train_dataset)} images, Valid: {len(valid_dataset)} images")
+    
+    # Create model
+    model = create_model(pretrained=True).to(device)
+    optimizer = optim.AdamW(model.parameters(), lr=config.LEARNING_RATE)
+    
+    # Training loop
+    best_loss = float('inf')
+    
+    for epoch in range(config.NUM_EPOCHS):
+        print(f"\nEpoch {epoch+1}/{config.NUM_EPOCHS}")
         
-        for imgs, tgts in tqdm(train_loader, desc=f"Epoch {epoch+1} Train"):
-            imgs = imgs.to(device)
-            
-            # --- Format targets for loss function ---
-            # 'tgts' is a list of dicts. Move them to device.
-            targets = []
-            for t in tgts:
-                targets.append({
-                    'bbox': t['bbox'].to(device),
-                    'cls': t['cls'].to(device),
-                    'img_size': t['img_size'].to(device),
-                    'img_scale': t['img_scale'].to(device)
-                })
-
-            opt.zero_grad()
-            
-            # --- Manual Loss Calculation ---
-            # 1. Get model output (class and box predictions)
-            class_out, box_out = model(imgs)
-            
-            # 2. Generate anchors for this batch
-            anchor_boxes = anchors(imgs)
-            
-            # 3. Calculate loss
-            loss, class_loss, box_loss = loss_fn(class_out, box_out, anchor_boxes, targets)
-            # -------------------------------
-            
-            loss.backward()
-            opt.step()
-            train_loss += loss.item()
+        train_loss = train_epoch(model, train_loader, optimizer, device, accum_steps=4)
+        valid_loss = validate(model, valid_loader, device)
         
-        print(f"Epoch {epoch+1}/{args.epochs} - Train Loss: {train_loss / len(train_loader):.4f}")
-
-        # === VALIDATION LOOP ===
-        model.eval()
+        print(f"Train Loss: {train_loss:.4f}, Valid Loss: {valid_loss:.4f}")
         
-        with torch.no_grad():
-            for imgs, tgts in tqdm(val_loader, desc=f"Epoch {epoch+1} Val"):
-                imgs = imgs.to(device)
-                
-                # --- Get Detections (this is different now) ---
-                # 1. Get raw model output
-                class_out, box_out = model(imgs)
-                # 2. Generate anchors
-                anchor_boxes = anchors(imgs)
-                
-                # 3. Use effdet's postprocess to get final boxes
-                # This part is complex. Let's use a temporary model
-                # in 'predict' mode just for this.
-                
-                # --- This is a SIMPLER way for validation ---
-                # We will use the 'bench_task' wrapper ONLY for prediction,
-                # as it handles all the complex post-processing (NMS).
-                
-                # Let's skip validation for 1 epoch to save the model,
-                # then we can use a proper prediction model.
-                
-                # --- A BETTER WAY: Use the 'predict' wrapper ---
-                # We need a separate model instance for this
-                pass # Skipping validation for this fix
-
-        # --- For now, just save the model at the end ---
-        
-    print("✅ Training complete! Saving model.")
-    torch.save(model.state_dict(), "efficientdet_model.pth")
+        # Save best model
+        if valid_loss < best_loss:
+            best_loss = valid_loss
+            save_path = os.path.join(config.CHECKPOINT_DIR, 'best_model.pth')
+            save_checkpoint(model, optimizer, epoch, save_path)
+            print(f"✓ New best model! Loss: {best_loss:.4f}")
+    
+    # Save final model
+    final_path = os.path.join(config.CHECKPOINT_DIR, 'final_model.pth')
+    save_checkpoint(model, optimizer, config.NUM_EPOCHS-1, final_path)
+    print(f"\nTraining complete! Best loss: {best_loss:.4f}")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    #... (rest of your parser is fine) ...
-    parser.add_argument("--train-root", type=str, required=True)
-    parser.add_argument("--val-root", type=str, required=True)
-    parser.add_argument("--num-classes", type=int, required=True)
-    parser.add_argument("--img-size", type=int, default=640)
-    parser.add_argument("--bs", type=int, default=2)
-    parser.add_argument("--lr", type=float, default=2e-4)
-    parser.add_argument("--epochs", type=int, default=2)
-    args = parser.parse_args()
-    train(args)
+if __name__ == '__main__':
+    main()

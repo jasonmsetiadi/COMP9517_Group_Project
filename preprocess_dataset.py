@@ -1,106 +1,252 @@
-# preprocess_dataset.py
 
-import cv2, numpy as np
-from pathlib import Path
+import os
+import cv2
+import numpy as np
+import torch
 from torch.utils.data import Dataset
+from PIL import Image
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
-import torch
 
-IMG_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+import config
 
-def _read_yolo_labels(txt):
-    boxes, clses = [], []
-    if not txt.exists():
-        return np.zeros((0, 4), np.float32), np.zeros((0,), np.int64)
-    for ln in txt.read_text().splitlines():
-        if not ln.strip(): continue
-        c, xc, yc, w, h = map(float, ln.split()[:5])
-        clses.append(int(c))
-        boxes.append([xc, yc, w, h])
-    return np.asarray(boxes, np.float32), np.asarray(clses, np.int64)
 
-def _yolo_to_xyxy_abs(boxes, W, H):
-    if boxes.size == 0:
-        return np.zeros((0, 4), np.float32)
-    xc, yc, w, h = boxes[:,0]*W, boxes[:,1]*H, boxes[:,2]*W, boxes[:,3]*H
-    x1 = np.clip(xc - w/2, 0, W-1)
-    y1 = np.clip(yc - h/2, 0, H-1)
-    x2 = np.clip(xc + w/2, 0, W-1)
-    y2 = np.clip(yc + h/2, 0, H-1)
-    return np.stack([x1, y1, x2, y2], axis=1).astype(np.float32)
+class YOLODataset(Dataset):
+    
+    def __init__(self, images_dir, labels_dir, image_size=512, transforms=None, is_train=True):
 
-class YoloDetDataset(Dataset):
-    def __init__(self, root, img_size=640, is_train=False, num_classes=12):
-        root = Path(root)
-        self.img_dir = root / "images"
-        self.lab_dir = root / "labels"
-        self.paths = sorted([p for p in self.img_dir.rglob("*") if p.suffix.lower() in IMG_EXT])
-        self.img_size = img_size
+        self.images_dir = images_dir
+        self.labels_dir = labels_dir
+        self.image_size = image_size
+        self.transforms = transforms
         self.is_train = is_train
-
-        if is_train:
-            self.tfms = A.Compose(
-                [
-                    A.HorizontalFlip(p=0.5),
-                    A.RandomBrightnessContrast(p=0.2),
-                    A.LongestMaxSize(max_size=img_size),
-                    A.PadIfNeeded(min_height=img_size, min_width=img_size, border_mode=cv2.BORDER_CONSTANT, fill=0), # Use 'value'
-                    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-                    ToTensorV2(),
-                ],
-                bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_labels"])
-            )
-        else:
-            self.tfms = A.Compose(
-                [
-                    A.LongestMaxSize(max_size=img_size),
-                    A.PadIfNeeded(min_height=img_size, min_width=img_size, border_mode=cv2.BORDER_CONSTANT, value=0), # Use 'value'
-                    A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-                    ToTensorV2(),
-                ],
-                bbox_params=A.BboxParams(format="pascal_voc", label_fields=["class_labels"])
-            )
-
+        
+        # Get list of image files
+        self.image_files = []
+        for fname in os.listdir(images_dir):
+            if fname.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+                self.image_files.append(fname)
+        
+        print(f"Found {len(self.image_files)} images in {images_dir}")
+    
     def __len__(self):
-        return len(self.paths)
-
-    def __getitem__(self, i):
-        ip = self.paths[i]
-        lp = self.lab_dir / ip.relative_to(self.img_dir).with_suffix(".txt")
-
-        img = cv2.imread(str(ip), cv2.IMREAD_COLOR)
-        if img is None: # Handle corrupted images
-            img = np.zeros((self.img_size, self.img_size, 3), dtype=np.uint8)
-            boxes_xyxy = np.zeros((0, 4), np.float32)
-            clses = np.zeros((0,), np.int64)
+        return len(self.image_files)
+    
+    def __getitem__(self, idx):
+        # Load image
+        img_name = self.image_files[idx]
+        img_path = os.path.join(self.images_dir, img_name)
+        image = cv2.imread(img_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        
+        orig_h, orig_w = image.shape[:2]
+        
+        # Load YOLO format labels
+        label_name = os.path.splitext(img_name)[0] + '.txt'
+        label_path = os.path.join(self.labels_dir, label_name)
+        
+        boxes = []
+        labels = []
+        
+        if os.path.exists(label_path):
+            with open(label_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    parts = line.split()
+                    class_id = int(parts[0])
+                    x_center = float(parts[1])
+                    y_center = float(parts[2])
+                    width = float(parts[3])
+                    height = float(parts[4])
+                    
+                    # Convert YOLO format (x_center, y_center, w, h) to (x_min, y_min, x_max, y_max)
+                    # YOLO coordinates are normalized, so multiply by image dimensions
+                    x_min = (x_center - width / 2) * orig_w
+                    y_min = (y_center - height / 2) * orig_h
+                    x_max = (x_center + width / 2) * orig_w
+                    y_max = (y_center + height / 2) * orig_h
+                    
+                    # Clip to image boundaries
+                    x_min = max(0, x_min)
+                    y_min = max(0, y_min)
+                    x_max = min(orig_w, x_max)
+                    y_max = min(orig_h, y_max)
+                    
+                    # Ensure valid box
+                    if x_max > x_min and y_max > y_min:
+                        boxes.append([x_min, y_min, x_max, y_max])
+                        labels.append(class_id)
+        
+        # Convert to numpy arrays
+        if len(boxes) == 0:
+            # Empty image - create dummy box
+            boxes = np.zeros((0, 4), dtype=np.float32)
+            labels = np.zeros((0,), dtype=np.int64)
         else:
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            H, W = img.shape[:2]
-            boxes_norm, clses = _read_yolo_labels(lp)
-            boxes_xyxy = _yolo_to_xyxy_abs(boxes_norm, W, H)
-
-        class_labels = clses.tolist()
-        bboxes_list = boxes_xyxy.tolist()
-
-        out = self.tfms(image=img, bboxes=bboxes_list, class_labels=class_labels)
-        img_t = out["image"]
-        bxs_t = np.array(out["bboxes"], np.float32)
-        cls_t = np.array(out["class_labels"], np.int64)
-
-        # --- This is the simple target format we need ---
+            boxes = np.array(boxes, dtype=np.float32)
+            labels = np.array(labels, dtype=np.int64)
+        
+        # Apply augmentations
+        if self.transforms is not None:
+            transformed = self.transforms(
+                image=image,
+                bboxes=boxes,
+                labels=labels
+            )
+            image = transformed['image']
+            boxes = np.array(transformed['bboxes'], dtype=np.float32)
+            labels = np.array(transformed['labels'], dtype=np.int64)
+        
+        # Resize image
+        image = cv2.resize(image, (self.image_size, self.image_size))
+        
+        # Resize boxes accordingly
+        if len(boxes) > 0:
+            boxes[:, [0, 2]] = boxes[:, [0, 2]] * (self.image_size / orig_w)
+            boxes[:, [1, 3]] = boxes[:, [1, 3]] * (self.image_size / orig_h)
+        
+        # Convert image to tensor and normalize
+        image = image.astype(np.float32) / 255.0
+        image = torch.from_numpy(image).permute(2, 0, 1)  # HWC to CHW
+        
+        # Normalize with ImageNet stats
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+        image = (image - mean) / std
+        
+        # Create target dict
         target = {
-            "bbox": torch.tensor(bxs_t, dtype=torch.float32),
-            "cls": torch.tensor(cls_t, dtype=torch.int64),
-            "img_size": torch.tensor((self.img_size, self.img_size), dtype=torch.float32),
-            "img_scale": torch.tensor(1.0, dtype=torch.float32)
+            'boxes': torch.from_numpy(boxes).float(),
+            'labels': torch.from_numpy(labels).long(),
+            'image_id': torch.tensor([idx])
         }
         
-        return img_t, target
+        return image, target
+
+
+def get_train_transforms():
+    """Get training augmentation transforms"""
+    if not config.USE_AUGMENTATION:
+        return None
+    
+    return A.Compose([
+        A.HorizontalFlip(p=config.HORIZONTAL_FLIP_PROB),
+        A.VerticalFlip(p=config.VERTICAL_FLIP_PROB),
+        A.Rotate(limit=config.ROTATION_LIMIT, p=config.AUGMENTATION_PROB),
+        A.RandomBrightnessContrast(
+            brightness_limit=0.2,
+            contrast_limit=0.2,
+            p=config.BRIGHTNESS_CONTRAST_PROB
+        ),
+        A.HueSaturationValue(
+            hue_shift_limit=20,
+            sat_shift_limit=30,
+            val_shift_limit=20,
+            p=config.HUE_SATURATION_PROB
+        ),
+        A.RandomGamma(p=config.RANDOM_GAMMA_PROB),
+        A.Blur(blur_limit=3, p=config.BLUR_PROB),
+    ], bbox_params=A.BboxParams(
+        format='pascal_voc',
+        label_fields=['labels'],
+        min_visibility=0.3
+    ))
+
+
+def get_valid_transforms():
+    """Get validation transforms (no augmentation)"""
+    return None
+
 
 def collate_fn(batch):
-    imgs = [b[0] for b in batch]
-    tgts = [b[1] for b in batch]
-    imgs = torch.stack(imgs, dim=0)
+    """
+    Custom collate function for DataLoader
+    Handles variable number of boxes per image
+    """
+    images = []
+    targets = []
     
-    return imgs, tgts
+    for image, target in batch:
+        images.append(image)
+        targets.append(target)
+    
+    images = torch.stack(images, dim=0)
+    
+    return images, targets
+
+
+def create_dataloaders(batch_size=8, num_workers=4):
+    # Create datasets
+    train_dataset = YOLODataset(
+        images_dir=config.TRAIN_IMAGES,
+        labels_dir=config.TRAIN_LABELS,
+        image_size=config.IMAGE_SIZE,
+        transforms=get_train_transforms(),
+        is_train=True
+    )
+    
+    valid_dataset = YOLODataset(
+        images_dir=config.VALID_IMAGES,
+        labels_dir=config.VALID_LABELS,
+        image_size=config.IMAGE_SIZE,
+        transforms=get_valid_transforms(),
+        is_train=False
+    )
+    
+    # Create dataloaders
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        pin_memory=True
+    )
+    
+    valid_loader = torch.utils.data.DataLoader(
+        valid_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        pin_memory=True
+    )
+    
+    print(f"Train dataset: {len(train_dataset)} images")
+    print(f"Valid dataset: {len(valid_dataset)} images")
+    print(f"Train batches: {len(train_loader)}")
+    print(f"Valid batches: {len(valid_loader)}")
+    
+    return train_loader, valid_loader
+
+
+if __name__ == '__main__':
+    """Test dataset loading"""
+    print("Testing dataset loading...")
+    
+    # Create dataset
+    dataset = YOLODataset(
+        images_dir=config.TRAIN_IMAGES,
+        labels_dir=config.TRAIN_LABELS,
+        image_size=config.IMAGE_SIZE,
+        transforms=get_train_transforms()
+    )
+    
+    print(f"Dataset size: {len(dataset)}")
+    
+    # Test loading one sample
+    image, target = dataset[0]
+    print(f"Image shape: {image.shape}")
+    print(f"Number of boxes: {len(target['boxes'])}")
+    print(f"Boxes: {target['boxes']}")
+    print(f"Labels: {target['labels']}")
+    
+    # Test dataloader
+    train_loader, valid_loader = create_dataloaders(batch_size=4, num_workers=0)
+    
+    images, targets = next(iter(train_loader))
+    print(f"\nBatch images shape: {images.shape}")
+    print(f"Number of targets: {len(targets)}")
