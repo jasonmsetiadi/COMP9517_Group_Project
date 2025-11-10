@@ -124,10 +124,6 @@ def evaluate_model(checkpoint_path):
         # Store predictions
         for box, score, label in zip(boxes, scores, labels):
             
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            # THIS IS THE FIX
-            # Convert 1-indexed (1-12) to 0-indexed (0-11)
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             fixed_label = int(label) - 1 
             
             if fixed_label in all_preds:
