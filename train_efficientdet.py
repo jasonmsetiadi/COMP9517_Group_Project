@@ -21,19 +21,13 @@ def train_epoch(model, dataloader, optimizer, device, accum_steps=4):
     for idx, (images, targets) in enumerate(tqdm(dataloader, desc="Training")):
         images = images.to(device)
         
-        # Convert targets to the format expected by DetBenchTrain
+        # Convert targets - stack tensors properly
         batch_target = {
-            'bbox': [],
-            'cls': [],
-            'img_scale': [],
-            'img_size': []
+            'bbox': torch.cat([t['bbox'] for t in targets], dim=0).to(device),
+            'cls': torch.cat([t['cls'] for t in targets], dim=0).to(device),
+            'img_scale': torch.stack([t['img_scale'] for t in targets]).to(device),
+            'img_size': torch.stack([t['img_size'] for t in targets]).to(device)
         }
-        
-        for t in targets:
-            batch_target['bbox'].append(t['bbox'].to(device))
-            batch_target['cls'].append(t['cls'].to(device))
-            batch_target['img_scale'].append(t['img_scale'].to(device))
-            batch_target['img_size'].append(t['img_size'].to(device))
         
         loss_dict = model(images, batch_target)
         loss = loss_dict['loss'] / accum_steps  # Scale loss
@@ -63,19 +57,13 @@ def validate(model, dataloader, device):
         for images, targets in tqdm(dataloader, desc="Validation"):
             images = images.to(device)
             
-            # Convert targets to the format expected by DetBenchTrain
+            # Convert targets - stack tensors properly
             batch_target = {
-                'bbox': [],
-                'cls': [],
-                'img_scale': [],
-                'img_size': []
+                'bbox': torch.cat([t['bbox'] for t in targets], dim=0).to(device),
+                'cls': torch.cat([t['cls'] for t in targets], dim=0).to(device),
+                'img_scale': torch.stack([t['img_scale'] for t in targets]).to(device),
+                'img_size': torch.stack([t['img_size'] for t in targets]).to(device)
             }
-            
-            for t in targets:
-                batch_target['bbox'].append(t['bbox'].to(device))
-                batch_target['cls'].append(t['cls'].to(device))
-                batch_target['img_scale'].append(t['img_scale'].to(device))
-                batch_target['img_size'].append(t['img_size'].to(device))
             
             loss_dict = model(images, batch_target)
             loss = loss_dict['loss']

@@ -22,12 +22,12 @@ CLASS_NAMES = ['ants', 'bees', 'beetle', 'catterpillar', 'earthworms', 'earwig',
 NUM_CLASSES = 12
 
 # Fast training option - Set to True for quick testing
-USE_SUBSET = True  # Set to True to use only part of data
-SUBSET_SIZE = 0.05   # Use 10% of data (only if USE_SUBSET=True)
+USE_SUBSET = False  # Set to True to use only part of data
+SUBSET_SIZE = 1   # Use 10% of data (only if USE_SUBSET=True)
 
 # Model settings
 MODEL_NAME = 'tf_efficientdet_d0'
-IMAGE_SIZE = 384
+IMAGE_SIZE = 512
 
 # Training parameters
 BATCH_SIZE = 2  # Reduced for CPU training
@@ -36,7 +36,7 @@ LEARNING_RATE = 1e-4
 NUM_WORKERS = 0  # Set to 0 for CPU to avoid multiprocessing issues
 
 # Detection settings
-CONF_THRESHOLD = 0.25
+CONF_THRESHOLD = 0.001
 NMS_THRESHOLD = 0.5
 
 # Device

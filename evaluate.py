@@ -1,15 +1,16 @@
 """
-Evaluation script - compute mAP
+Evaluation script - compute mAP (FINAL FIX)
 """
 import torch
 import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from effdet import DetBenchPredict 
 
 import config
 from dataset import YOLODataset, collate_fn
 from model import create_model, load_checkpoint
-from detect_effdet import postprocess_detections
+from detect_effdet import postprocess_detections 
 
 
 def calculate_iou(box1, box2):
@@ -80,17 +81,28 @@ def evaluate_model(checkpoint_path):
     """Evaluate model and compute mAP"""
     device = torch.device(config.DEVICE)
     
-    # Load model
-    model = create_model(pretrained=False).to(device)
-    model = load_checkpoint(model, checkpoint_path)
+    # --- Step 1: Load weights into training model ---
+    print("Loading model for evaluation...")
+    train_model = create_model(pretrained=False).to(device)
+    train_model = load_checkpoint(train_model, checkpoint_path)
+    train_model.eval()
+
+    # --- Step 2: Create prediction model ---
+    model = DetBenchPredict(train_model.model).to(device)
     model.eval()
+    print("Created prediction model.")
     
     # Load validation data
+    original_use_subset = getattr(config, 'USE_SUBSET', False)
+    config.USE_SUBSET = False
+    
     dataset = YOLODataset(config.VALID_IMAGES, config.VALID_LABELS, 
-                         config.IMAGE_SIZE, augment=False)
+                          config.IMAGE_SIZE, augment=False)
+    
+    config.USE_SUBSET = original_use_subset
+    
     loader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=collate_fn)
     
-    # Collect predictions and ground truths
     all_preds = {i: [] for i in range(config.NUM_CLASSES)}
     all_gts = {i: [] for i in range(config.NUM_CLASSES)}
     
@@ -100,16 +112,26 @@ def evaluate_model(checkpoint_path):
         images = images.to(device)
         
         with torch.no_grad():
-            detections = model.model(images)
+            detections = model(images) 
+        
+        img_size_h, img_size_w = targets[0]['img_size'].numpy()
         
         boxes, scores, labels = postprocess_detections(
-            detections, (config.IMAGE_SIZE, config.IMAGE_SIZE), 
+            detections, (img_size_h, img_size_w), 
             config.IMAGE_SIZE, config.CONF_THRESHOLD, config.NMS_THRESHOLD
         )
         
         # Store predictions
         for box, score, label in zip(boxes, scores, labels):
-            all_preds[int(label)].append({'bbox': box, 'score': score})
+            
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            # THIS IS THE FIX
+            # Convert 1-indexed (1-12) to 0-indexed (0-11)
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            fixed_label = int(label) - 1 
+            
+            if fixed_label in all_preds:
+                all_preds[fixed_label].append({'bbox': box, 'score': score})
         
         # Store ground truths
         gt_boxes = targets[0]['bbox'].numpy()
