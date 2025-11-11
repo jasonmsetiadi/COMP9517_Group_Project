@@ -34,5 +34,6 @@ NUM_WORKERS = 2
 # Subset (for testing)
 USE_SUBSET = False  # Set True for quick test
 SUBSET_SIZE = 0.1
+NUM_EPOCHS = 30
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
