@@ -6,6 +6,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from effdet import DetBenchPredict 
+import sys # <-- Added import
 
 import config
 from dataset import YOLODataset, collate_fn
@@ -27,7 +28,7 @@ def calculate_iou(box1, box2):
     area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
     area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
     
-    return inter / (area1 + area2 - inter)
+    return inter / (area1 + area2 - inter) if (area1 + area2 - inter) > 0 else 0
 
 
 def compute_ap(detections, ground_truths, iou_thresh=0.5):
@@ -37,7 +38,6 @@ def compute_ap(detections, ground_truths, iou_thresh=0.5):
     if len(detections) == 0:
         return 0.0
     
-    # Sort by confidence
     detections = sorted(detections, key=lambda x: x['score'], reverse=True)
     
     tp = np.zeros(len(detections))
@@ -65,7 +65,6 @@ def compute_ap(detections, ground_truths, iou_thresh=0.5):
     recalls = tp_cumsum / len(ground_truths)
     precisions = tp_cumsum / (tp_cumsum + fp_cumsum)
     
-    # Compute AP
     ap = 0.0
     for t in np.linspace(0, 1, 11):
         if np.sum(recalls >= t) == 0:
@@ -77,9 +76,12 @@ def compute_ap(detections, ground_truths, iou_thresh=0.5):
     return ap
 
 
-def evaluate_model(checkpoint_path):
+# --- MODIFIED: Function now takes image/label paths ---
+def evaluate_model(checkpoint_path, images_path, labels_path, dataset_name="Validation"):
     """Evaluate model and compute mAP"""
     device = torch.device(config.DEVICE)
+    
+    print(f"\n{'='*60}\nCalculating mAP on {dataset_name.upper()} SET\n{'='*60}\n")
     
     # --- Step 1: Load weights into training model ---
     print("Loading model for evaluation...")
@@ -92,14 +94,9 @@ def evaluate_model(checkpoint_path):
     model.eval()
     print("Created prediction model.")
     
-    # Load validation data
-    original_use_subset = getattr(config, 'USE_SUBSET', False)
-    config.USE_SUBSET = False
-    
-    dataset = YOLODataset(config.VALID_IMAGES, config.VALID_LABELS, 
+    # --- MODIFIED: Uses the paths passed into the function (and fixes your bug) ---
+    dataset = YOLODataset(images_path, labels_path, 
                           config.IMAGE_SIZE, augment=False)
-    
-    config.USE_SUBSET = original_use_subset
     
     loader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=collate_fn)
     
@@ -123,8 +120,7 @@ def evaluate_model(checkpoint_path):
         
         # Store predictions
         for box, score, label in zip(boxes, scores, labels):
-            
-            fixed_label = int(label) - 1 
+            fixed_label = int(label) - 1 # Fix 1-indexed to 0-indexed
             
             if fixed_label in all_preds:
                 all_preds[fixed_label].append({'bbox': box, 'score': score})
@@ -154,12 +150,27 @@ def evaluate_model(checkpoint_path):
     return mean_ap, aps
 
 
+# --- MODIFIED: This block now checks for 'test' or 'valid' ---
 if __name__ == '__main__':
-    import sys
-    
     if len(sys.argv) < 2:
-        print("Usage: python evaluate.py <checkpoint>")
+        print("Usage: python evaluate.py <checkpoint_path> [valid/test]")
+        print("Example (for final test report): python evaluate.py outputs/checkpoints/best_model.pth test")
         sys.exit(1)
     
     checkpoint = sys.argv[1]
-    evaluate_model(checkpoint)
+    dataset_type = sys.argv[2] if len(sys.argv) > 2 else 'valid'
+
+    if dataset_type.lower() == 'test':
+        # Check config.py for test paths
+        if not (hasattr(config, 'TEST_IMAGES') and hasattr(config, 'TEST_LABELS')):
+            print("Error: TEST_IMAGES and TEST_LABELS not defined in config.py")
+            sys.exit(1)
+        images = config.TEST_IMAGES 
+        labels = config.TEST_LABELS 
+        name = "Test"
+    else:
+        images = config.VALID_IMAGES
+        labels = config.VALID_LABELS
+        name = "Validation"
+    
+    evaluate_model(checkpoint, images, labels, name)

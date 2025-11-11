@@ -10,6 +10,8 @@ TRAIN_IMAGES = os.path.join(DATASET_ROOT, "train", "images")
 TRAIN_LABELS = os.path.join(DATASET_ROOT, "train", "labels")
 VALID_IMAGES = os.path.join(DATASET_ROOT, "valid", "images")
 VALID_LABELS = os.path.join(DATASET_ROOT, "valid", "labels")
+TEST_IMAGES = os.path.join(DATASET_ROOT, "test", "images")
+TEST_LABELS = os.path.join(DATASET_ROOT, "test", "labels")
 
 # Output paths
 OUTPUT_DIR = r"C:\Users\20695\Desktop\COMP9517\COMP9517_Group_Project\outputs"
@@ -36,7 +38,7 @@ LEARNING_RATE = 1e-4
 NUM_WORKERS = 0  # Set to 0 for CPU to avoid multiprocessing issues
 
 # Detection settings
-CONF_THRESHOLD = 0.001
+CONF_THRESHOLD = 0.005
 NMS_THRESHOLD = 0.5
 
 # Device
