@@ -16,9 +16,9 @@ TRAIN_DATA_DIR = os.path.join(PROJECT_ROOT, 'dataset', 'train')
 TRAIN_PROPOSALS_DIR = os.path.join(TRAIN_DATA_DIR, 'proposals')
 TRAIN_OVERLAP_DIR = os.path.join(TRAIN_DATA_DIR, 'overlap')
 
-def negative_bbox_random_sampling(img_path, class_id, num_pos, threshold=0.1):
+def negative_bbox_random_sampling(img_path, class_id, num_pos, threshold=0.3):
     # define the number of negative samples
-    num_samples = 2 if num_pos == 0 else num_pos*2
+    num_samples = 1 if num_pos == 0 else int(num_pos*0.75)
 
     # get indices of negative samples
     file_name = os.path.basename(img_path)
@@ -39,13 +39,31 @@ def negative_bbox_random_sampling(img_path, class_id, num_pos, threshold=0.1):
 
     return negative_samples
 
-def positive_bbox_sampling(image, labels, class_id):
+def positive_bbox_sampling(img_path, labels, class_id, img_width, img_height, threshold=1):
     positive_samples = []
-    image_width, image_height = image.shape[:2]
+
+    # get positive samples from labels
     for label in labels:
         if label['label'] == class_id:
-            pos_box = yolo_to_iou_format(label['box'], image_width, image_height)
+            pos_box = yolo_to_iou_format(label['box'], img_width, img_height)
             positive_samples.append(pos_box)
+    
+    # get indices of negative samples
+    file_name = os.path.basename(img_path)
+    overlap_path = os.path.join(TRAIN_OVERLAP_DIR, file_name.replace(".jpg", ".npy"))
+    overlap_matrix = np.load(overlap_path)
+    class_id_column = overlap_matrix[:, class_id]
+    sampled_indices = np.where(class_id_column > threshold)[0]
+
+    # get proposal bboxes
+    proposal_path = os.path.join(TRAIN_PROPOSALS_DIR, file_name.replace(".jpg", ".txt"))
+    proposal_bboxes = []
+    with open(proposal_path, "r") as f:
+        for line in f:
+            proposal_bboxes.append(list(map(float, line.split())))
+    proposal_bboxes = np.array(proposal_bboxes)
+    positive_samples.extend([ss_to_iou_format(sample) for sample in proposal_bboxes[sampled_indices].tolist()])
+
     return positive_samples
 
 def get_training_data(data, class_id, region_size=(96, 96), save=True):
@@ -55,9 +73,10 @@ def get_training_data(data, class_id, region_size=(96, 96), save=True):
     for i in range(len(data)):
         img_path , bboxes = data[i]
         img = cv2.imread(img_path)
+        img_width, img_height = img.shape[:2]
 
         # positive samples
-        pos_boxes = positive_bbox_sampling(img, bboxes, class_id)
+        pos_boxes = positive_bbox_sampling(img_path, bboxes, class_id, img_width, img_height, threshold=0.8)
         num_pos += len(pos_boxes)
         for pos_box in pos_boxes:
             warp = warp_region(img, pos_box, output_size=region_size)

@@ -9,13 +9,13 @@ sys.path.insert(0, PROJECT_ROOT)
 
 import pickle
 from src.preprocessing import warp_region, extract_features
-from src.utils import ss_to_iou_format
+from src.utils import ss_to_iou_format, compute_iou
 import cv2
 TEST_DATA_DIR = os.path.join(PROJECT_ROOT, 'dataset', 'test')
 TEST_PROPOSAL_DIR = os.path.join(TEST_DATA_DIR, 'proposals')
 
 def classify_region_proposals(img_path, region_proposals, class_svms, 
-                              score_threshold=0.5, nms_threshold=0.3):
+                              score_threshold=None, nms_threshold=0.3):
     """
     Classify region proposals using trained SVMs.
     
@@ -59,33 +59,29 @@ def classify_region_proposals(img_path, region_proposals, class_svms,
         confidence_score = class_scores[best_class_id]
         
         # Keep only if above threshold
-        if confidence_score >= score_threshold:
-            detection = list(bbox)
-            detection.append(best_class_id)
-            detection.append(confidence_score)
-            detections.append(detection)
+        # if confidence_score >= score_threshold:
+        detection = list(bbox) 
+        detection.append(best_class_id) 
+        detection.append(confidence_score) 
+        detections.append(detection)
     
-    # # Step 4: Apply NMS per class
-    # final_detections = []
+    # Step 4: Apply NMS per class
+    final_detections = []
     
-    # for class_id in range(num_classes):
-    #     # Get all detections for this class
-    #     class_dets = [d for d in detections if d['class_id'] == class_id]
+    for class_id in range(num_classes):
+        class_dets = [d for d in detections if d[4] == class_id]
+        if len(class_dets) == 0:
+            continue
         
-    #     if len(class_dets) == 0:
-    #         continue
+        boxes = [d[:4] for d in class_dets]
+        scores = [d[5] for d in class_dets]
         
-    #     # Apply NMS
-    #     kept_indices = non_max_suppression(
-    #         [d['bbox'] for d in class_dets],
-    #         [d['confidence'] for d in class_dets],
-    #         nms_threshold
-    #     )
+        kept_indices = non_max_suppression(boxes, scores, nms_threshold)
         
-    #     for idx in kept_indices:
-    #         final_detections.append(class_dets[idx])
+        for idx in kept_indices:
+            final_detections.append(class_dets[idx])
     
-    return np.array(detections)
+    return np.array(final_detections)
 
 
 def non_max_suppression(boxes, scores, iou_threshold):
@@ -120,7 +116,7 @@ def non_max_suppression(boxes, scores, iou_threshold):
         current_box = boxes[current_idx]
         remaining_boxes = boxes[sorted_indices[1:]]
         
-        ious = compute_iou(current_box, remaining_boxes)
+        ious = np.array([compute_iou(current_box, box) for box in remaining_boxes])
         
         # Keep only boxes with IoU less than threshold
         keep_mask = ious < iou_threshold
