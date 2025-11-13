@@ -1,5 +1,0 @@
-opencv-contrib-python
-matplotlib
-scikit-image
-scikit-learn
-mean_average_precision
