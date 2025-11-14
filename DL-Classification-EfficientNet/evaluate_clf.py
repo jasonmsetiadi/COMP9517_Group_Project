@@ -1,29 +1,35 @@
 """
-Evaluate classification model - ALL METRICS
+Complete Classification Evaluation - EfficientNet
+Outputs results table like detection version
 """
 import torch
 import numpy as np
+import pandas as pd
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from sklearn.metrics import (accuracy_score, precision_recall_fscore_support,
-                             confusion_matrix, classification_report, roc_auc_score)
+                             confusion_matrix, roc_auc_score)
 import matplotlib.pyplot as plt
 import seaborn as sns
 import time
 import sys
+import json
 
 import config_clf as config
 from dataset_clf import InsectDataset
 from train_clf import create_model
 
 
-def evaluate(checkpoint_path, data_dir, dataset_name="Test"):
-    """Comprehensive evaluation"""
-    print(f"\n{'='*60}\n{dataset_name.upper()} SET EVALUATION\n{'='*60}\n")
+def evaluate_classification(checkpoint_path, data_dir, dataset_name="Test"):
+    """Complete evaluation with table output"""
+    print(f"\n{'='*70}")
+    print(f"CLASSIFICATION EVALUATION - {dataset_name.upper()} SET")
+    print(f"{'='*70}\n")
     
     device = torch.device(config.DEVICE)
     
     # Load model
+    print("Loading model...")
     model = create_model().to(device)
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -33,7 +39,7 @@ def evaluate(checkpoint_path, data_dir, dataset_name="Test"):
     # Load dataset
     dataset = InsectDataset(data_dir, augment=False)
     loader = DataLoader(dataset, batch_size=config.BATCH_SIZE, shuffle=False)
-    print(f"Images: {len(dataset)}\n")
+    print(f"Dataset: {len(dataset)} images\n")
     
     # Predict
     all_preds = []
@@ -41,7 +47,7 @@ def evaluate(checkpoint_path, data_dir, dataset_name="Test"):
     all_probs = []
     inference_times = []
     
-    print("Evaluating...")
+    print("Running inference...")
     with torch.no_grad():
         for images, labels in tqdm(loader):
             images = images.to(device)
@@ -61,69 +67,147 @@ def evaluate(checkpoint_path, data_dir, dataset_name="Test"):
     all_labels = np.array(all_labels)
     all_probs = np.array(all_probs)
     
-    # Metrics
-    print(f"\n{'='*60}\nMETRICS\n{'='*60}")
+    print("\nComputing metrics...\n")
     
-    # Accuracy
+    # Overall metrics
     accuracy = accuracy_score(all_labels, all_preds)
-    print(f"Accuracy: {accuracy:.4f}")
     
-    # Precision, Recall, F1
-    precision, recall, f1, _ = precision_recall_fscore_support(
+    # Get classes present in data
+    unique_labels = sorted(set(all_labels) | set(all_preds))
+    class_names_present = [config.CLASS_NAMES[i] for i in unique_labels]
+    
+    # Per-class metrics
+    per_class_precision, per_class_recall, per_class_f1, _ = precision_recall_fscore_support(
+        all_labels, all_preds, labels=unique_labels, zero_division=0
+    )
+    
+    # Overall weighted metrics
+    overall_precision, overall_recall, overall_f1, _ = precision_recall_fscore_support(
         all_labels, all_preds, average='weighted', zero_division=0
     )
-    print(f"Precision: {precision:.4f}")
-    print(f"Recall: {recall:.4f}")
-    print(f"F1 Score: {f1:.4f}")
     
     # AUC (one-vs-rest)
     try:
         auc = roc_auc_score(all_labels, all_probs, multi_class='ovr', average='weighted')
-        print(f"AUC: {auc:.4f}")
     except:
-        auc = 0
-        print(f"AUC: N/A")
+        auc = 0.0
     
-    # Per-class metrics
-    print(f"\n{'='*60}\nPER-CLASS METRICS\n{'='*60}")
+    # Per-class accuracy (correct predictions / total for that class)
+    per_class_accuracy = []
+    for label in unique_labels:
+        class_mask = (all_labels == label)
+        if class_mask.sum() > 0:
+            class_acc = (all_preds[class_mask] == label).sum() / class_mask.sum()
+        else:
+            class_acc = 0.0
+        per_class_accuracy.append(class_acc)
     
-    # Get only classes present in data
-    unique_labels = sorted(set(all_labels) | set(all_preds))
-    class_names_present = [config.CLASS_NAMES[i] for i in unique_labels]
+    # Create results table
+    table_data = []
+    for i, label in enumerate(unique_labels):
+        class_name = config.CLASS_NAMES[label]
+        table_data.append({
+            'Class': class_name,
+            'Precision': per_class_precision[i],
+            'Recall': per_class_recall[i],
+            'AP': per_class_precision[i],  # For classification, AP ≈ Precision
+            'F1': per_class_f1[i],
+            'Accuracy': per_class_accuracy[i]
+        })
     
-    print(classification_report(all_labels, all_preds, 
-                                labels=unique_labels,
-                                target_names=class_names_present,
-                                zero_division=0))
+    # Add mAP row (mean of per-class precision)
+    mAP = np.mean(per_class_precision)
+    table_data.append({
+        'Class': 'mAP',
+        'Precision': np.nan,
+        'Recall': np.nan,
+        'AP': mAP,
+        'F1': np.nan,
+        'Accuracy': np.nan
+    })
     
-    # Confusion Matrix with Precision & Recall in cells
-    cm = confusion_matrix(all_labels, all_preds)
+    # Add overall row
+    table_data.append({
+        'Class': 'Overall',
+        'Precision': overall_precision,
+        'Recall': overall_recall,
+        'AP': np.nan,
+        'F1': overall_f1,
+        'Accuracy': accuracy
+    })
+    
+    df = pd.DataFrame(table_data)
+    
+    # Print results
+    print(f"{'='*70}")
+    print("RESULTS TABLE")
+    print(f"{'='*70}")
+    print(df.to_string(index=True))
+    print(f"{'='*70}\n")
+    
+    # Save results
+    csv_filename = f'classification_results_{dataset_name.lower()}.csv'
+    df.to_csv(csv_filename, index=False)
+    print(f"✓ Results saved: {csv_filename}")
+    
+    # Save JSON
+    json_data = {
+        'dataset': dataset_name,
+        'total_images': len(dataset),
+        'mAP': float(mAP),
+        'overall_metrics': {
+            'accuracy': float(accuracy),
+            'precision': float(overall_precision),
+            'recall': float(overall_recall),
+            'f1': float(overall_f1),
+            'auc': float(auc)
+        },
+        'per_class_metrics': {
+            config.CLASS_NAMES[unique_labels[i]]: {
+                'precision': float(per_class_precision[i]),
+                'recall': float(per_class_recall[i]),
+                'f1': float(per_class_f1[i]),
+                'accuracy': float(per_class_accuracy[i])
+            }
+            for i in range(len(unique_labels))
+        },
+        'timing': {
+            'average_inference_ms': float(np.mean(inference_times)),
+            'fps': float(1000 / np.mean(inference_times))
+        }
+    }
+    
+    json_filename = f'classification_results_{dataset_name.lower()}.json'
+    with open(json_filename, 'w') as f:
+        json.dump(json_data, f, indent=2)
+    print(f"✓ Results saved: {json_filename}")
+    
+    # Confusion Matrix
+    print("\nGenerating confusion matrix...")
+    cm = confusion_matrix(all_labels, all_preds, labels=unique_labels)
     
     # Calculate precision and recall per class
-    cm_precision = cm.diagonal() / cm.sum(axis=0)  # Precision per class
-    cm_recall = cm.diagonal() / cm.sum(axis=1)     # Recall per class
+    cm_precision = cm.diagonal() / cm.sum(axis=0)
+    cm_recall = cm.diagonal() / cm.sum(axis=1)
     
-    # Create annotations with count, precision, and recall
+    # Create annotations
     annotations = np.empty_like(cm, dtype=object)
     for i in range(cm.shape[0]):
         for j in range(cm.shape[1]):
             count = cm[i, j]
-            if i == j:  # Diagonal (correct predictions)
+            if i == j:  # Diagonal
                 annotations[i, j] = f'{count}\nP: {cm_precision[j]:.2f}\nR: {cm_recall[i]:.2f}'
-            else:  # Off-diagonal (errors)
+            else:
                 annotations[i, j] = f'{count}'
     
-    # Create figure
+    # Plot
     fig, ax = plt.subplots(figsize=(14, 12))
-    
-    # Plot confusion matrix with custom annotations
     sns.heatmap(cm, annot=annotations, fmt='', cmap='Blues',
                xticklabels=class_names_present,
                yticklabels=class_names_present,
                ax=ax, cbar_kws={'label': 'Count'},
                annot_kws={'fontsize': 9})
     
-    # Title with accuracy
     ax.set_title(f'Confusion Matrix - {dataset_name} Set\nAccuracy: {accuracy:.4f}', 
                 fontsize=14, fontweight='bold', pad=20)
     ax.set_ylabel('True Label', fontsize=12)
@@ -131,41 +215,19 @@ def evaluate(checkpoint_path, data_dir, dataset_name="Test"):
                  fontsize=12)
     
     plt.tight_layout()
-    filename = f'confusion_matrix_{dataset_name.lower()}_clf.png'
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
-    print(f"✓ Confusion matrix saved: {filename}")
+    cm_filename = f'confusion_matrix_{dataset_name.lower()}_clf.png'
+    plt.savefig(cm_filename, dpi=300, bbox_inches='tight')
+    print(f"✓ Confusion matrix saved: {cm_filename}\n")
     plt.close()
     
-    # Timing
-    avg_time = np.mean(inference_times)
-    print(f"\n{'='*60}\nTIMING\n{'='*60}")
-    print(f"Inference: {avg_time:.2f} ms/image")
-    print(f"FPS: {1000/avg_time:.1f}")
-    
-    # Summary
-    print(f"\n{'='*60}\nSUMMARY FOR REPORT\n{'='*60}")
-    print(f"{dataset_name} Set Results:")
-    print(f"  Accuracy:  {accuracy:.4f}")
-    print(f"  Precision: {precision:.4f}")
-    print(f"  Recall:    {recall:.4f}")
-    print(f"  F1 Score:  {f1:.4f}")
-    print(f"  AUC:       {auc:.4f}")
-    print(f"  Inference: {avg_time:.2f} ms/image")
-    print(f"{'='*60}\n")
-    
-    return {
-        'accuracy': accuracy,
-        'precision': precision,
-        'recall': recall,
-        'f1': f1,
-        'auc': auc,
-        'inference_ms': avg_time
-    }
+    return df
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print("Usage: python evaluate_clf.py <checkpoint_path> [valid/test]")
+        print("Usage: python evaluate_classification_final.py <checkpoint_path> [valid/test]")
+        print("\nExample:")
+        print("  python evaluate_classification_final.py outputs_classification/checkpoints/best_model.pth test")
         sys.exit(1)
     
     checkpoint = sys.argv[1]
@@ -178,4 +240,4 @@ if __name__ == '__main__':
         data_dir = config.VALID_DIR
         name = "Validation"
     
-    evaluate(checkpoint, data_dir, name)
+    evaluate_classification(checkpoint, data_dir, name)
