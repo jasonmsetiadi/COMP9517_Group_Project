@@ -78,7 +78,9 @@
     }
   },
   "timing": {
-    "average_inference_ms": 16.096148639917374,
-    "fps": 62.126662866424255
+    "average_prediction_duration_per_image_seconds": 0.01691175578162074,
+    "total_prediction_duration_seconds": 0.27058809250593185,
+    "average_inference_ms": 16.91175578162074,
+    "fps": 59.13046598548769
   }
 }

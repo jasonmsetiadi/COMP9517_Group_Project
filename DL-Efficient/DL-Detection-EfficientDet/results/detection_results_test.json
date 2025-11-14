@@ -80,5 +80,11 @@
       "ap": 0.4143075108468106,
       "f1": 0.1394769613947696
     }
+  },
+  "timing": {
+    "average_prediction_duration_per_image_seconds": 0.7391850887200772,
+    "total_prediction_duration_seconds": 403.5950584411621,
+    "average_inference_ms": 739.1850887200771,
+    "fps": 1.3528411425770672
   }
 }

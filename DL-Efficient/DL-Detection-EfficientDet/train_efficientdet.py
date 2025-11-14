@@ -1,11 +1,13 @@
 """
-Training script for EfficientDet
+Training script for EfficientDet WITH TIMING
 """
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import os
+import time
+import json
 
 import config
 from dataset import YOLODataset, collate_fn
@@ -21,26 +23,26 @@ def train_epoch(model, dataloader, optimizer, device, accum_steps=4):
     for idx, (images, targets) in enumerate(tqdm(dataloader, desc="Training")):
         images = images.to(device)
         
-        # Convert targets - stack tensors properly
-        batch_target = {
-            'bbox': torch.cat([t['bbox'] for t in targets], dim=0).to(device),
-            'cls': torch.cat([t['cls'] for t in targets], dim=0).to(device),
-            'img_scale': torch.stack([t['img_scale'] for t in targets]).to(device),
-            'img_size': torch.stack([t['img_size'] for t in targets]).to(device)
-        }
+        # DetBenchTrain expects list of target dicts (one per image in batch)
+        batch_targets = []
+        for t in targets:
+            batch_targets.append({
+                'bbox': t['bbox'].to(device),
+                'cls': t['cls'].to(device),
+                'img_scale': t['img_scale'].to(device),
+                'img_size': t['img_size'].to(device)
+            })
         
-        loss_dict = model(images, batch_target)
-        loss = loss_dict['loss'] / accum_steps  # Scale loss
+        loss_dict = model(images, batch_targets)
+        loss = loss_dict['loss'] / accum_steps
         loss.backward()
         
-        # Update weights every accum_steps
         if (idx + 1) % accum_steps == 0:
             optimizer.step()
             optimizer.zero_grad()
         
         total_loss += loss.item() * accum_steps
     
-    # Final update if needed
     if len(dataloader) % accum_steps != 0:
         optimizer.step()
         optimizer.zero_grad()
@@ -57,15 +59,17 @@ def validate(model, dataloader, device):
         for images, targets in tqdm(dataloader, desc="Validation"):
             images = images.to(device)
             
-            # Convert targets - stack tensors properly
-            batch_target = {
-                'bbox': torch.cat([t['bbox'] for t in targets], dim=0).to(device),
-                'cls': torch.cat([t['cls'] for t in targets], dim=0).to(device),
-                'img_scale': torch.stack([t['img_scale'] for t in targets]).to(device),
-                'img_size': torch.stack([t['img_size'] for t in targets]).to(device)
-            }
+            # DetBenchTrain expects list of target dicts (one per image in batch)
+            batch_targets = []
+            for t in targets:
+                batch_targets.append({
+                    'bbox': t['bbox'].to(device),
+                    'cls': t['cls'].to(device),
+                    'img_scale': t['img_scale'].to(device),
+                    'img_size': t['img_size'].to(device)
+                })
             
-            loss_dict = model(images, batch_target)
+            loss_dict = model(images, batch_targets)
             loss = loss_dict['loss']
             total_loss += loss.item()
     
@@ -97,6 +101,7 @@ def main():
     
     # Training loop
     best_loss = float('inf')
+    start_time = time.time()
     
     for epoch in range(config.NUM_EPOCHS):
         print(f"\nEpoch {epoch+1}/{config.NUM_EPOCHS}")
@@ -113,10 +118,31 @@ def main():
             save_checkpoint(model, optimizer, epoch, save_path)
             print(f"✓ New best model! Loss: {best_loss:.4f}")
     
+    # Calculate total training time
+    total_training_time = time.time() - start_time
+    
     # Save final model
     final_path = os.path.join(config.CHECKPOINT_DIR, 'final_model.pth')
     save_checkpoint(model, optimizer, config.NUM_EPOCHS-1, final_path)
-    print(f"\nTraining complete! Best loss: {best_loss:.4f}")
+    
+    print(f"\nTraining complete!")
+    print(f"Best loss: {best_loss:.4f}")
+    print(f"Total training time: {total_training_time:.2f} seconds ({total_training_time/3600:.2f} hours)")
+    
+    # Save training timing
+    timing_info = {
+        "total_train_duration_seconds": total_training_time,
+        "total_train_duration_hours": total_training_time / 3600,
+        "epochs": config.NUM_EPOCHS,
+        "best_loss": float(best_loss),
+        "note": "Per-class training time not tracked for detection (complex to compute)"
+    }
+    
+    timing_file = os.path.join(config.CHECKPOINT_DIR, 'training_timing.json')
+    with open(timing_file, 'w') as f:
+        json.dump(timing_info, f, indent=2)
+    
+    print(f"✓ Training timing saved: {timing_file}")
 
 
 if __name__ == '__main__':

@@ -10,6 +10,7 @@ from tqdm import tqdm
 from effdet import DetBenchPredict
 import sys
 import json
+import time
 
 import config
 from dataset import YOLODataset, collate_fn
@@ -183,6 +184,8 @@ def evaluate_detection(checkpoint_path, images_path, labels_path, dataset_name="
     all_preds = {i: [] for i in range(config.NUM_CLASSES)}
     all_gts = {i: [] for i in range(config.NUM_CLASSES)}
     
+    inference_times = []
+    
     print("Running inference...")
     with torch.no_grad():
         for images, targets in tqdm(loader):
@@ -195,8 +198,11 @@ def evaluate_detection(checkpoint_path, images_path, labels_path, dataset_name="
             for box, label in zip(gt_boxes, gt_labels):
                 all_gts[int(label)].append({'bbox': box})
             
-            # Predictions
+            # Predictions with timing
+            start_time = time.time()
             detections = model(images)
+            inference_times.append((time.time() - start_time) * 1000)  # milliseconds
+            
             img_size = (targets[0]['img_size'][0].item(), targets[0]['img_size'][1].item())
             
             boxes, scores, labels = postprocess_detections(
@@ -274,6 +280,9 @@ def evaluate_detection(checkpoint_path, images_path, labels_path, dataset_name="
     print(f"✓ Results saved: {csv_filename}")
     
     # Save JSON
+    avg_inference_ms = np.mean(inference_times)
+    total_inference_s = np.sum(inference_times) / 1000
+    
     json_data = {
         'dataset': dataset_name,
         'total_images': len(dataset),
@@ -291,13 +300,41 @@ def evaluate_detection(checkpoint_path, images_path, labels_path, dataset_name="
                 'f1': float(r['f1'])
             }
             for name, r in per_class_results.items()
+        },
+        'timing': {
+            'average_prediction_duration_per_image_seconds': float(avg_inference_ms / 1000),
+            'total_prediction_duration_seconds': float(total_inference_s),
+            'average_inference_ms': float(avg_inference_ms),
+            'fps': float(1000 / avg_inference_ms)
         }
     }
     
     json_filename = f'detection_results_{dataset_name.lower()}.json'
     with open(json_filename, 'w') as f:
         json.dump(json_data, f, indent=2)
-    print(f"✓ Results saved: {json_filename}\n")
+    print(f"✓ Results saved: {json_filename}")
+    
+    # Save timing to separate CSV
+    timing_df = pd.DataFrame([{
+        'Metric': 'Average Prediction Duration (seconds/image)',
+        'Value': float(avg_inference_ms / 1000)
+    }, {
+        'Metric': 'Total Prediction Duration (seconds)',
+        'Value': float(total_inference_s)
+    }, {
+        'Metric': 'Average Inference (ms/image)',
+        'Value': float(avg_inference_ms)
+    }, {
+        'Metric': 'FPS',
+        'Value': float(1000 / avg_inference_ms)
+    }, {
+        'Metric': 'Total Images',
+        'Value': len(dataset)
+    }])
+    
+    timing_csv = f'detection_timing_{dataset_name.lower()}.csv'
+    timing_df.to_csv(timing_csv, index=False)
+    print(f"✓ Timing saved: {timing_csv}\n")
     
     return df
 

@@ -54,7 +54,8 @@ def evaluate_classification(checkpoint_path, data_dir, dataset_name="Test"):
             
             start = time.time()
             outputs = model(images)
-            inference_times.append((time.time() - start) * 1000 / images.size(0))
+            batch_time = (time.time() - start) * 1000  # milliseconds
+            inference_times.append(batch_time / images.size(0))  # ms per image
             
             probs = torch.softmax(outputs, dim=1)
             _, preds = outputs.max(1)
@@ -151,6 +152,9 @@ def evaluate_classification(checkpoint_path, data_dir, dataset_name="Test"):
     print(f"✓ Results saved: {csv_filename}")
     
     # Save JSON
+    avg_inference_ms = np.mean(inference_times)
+    total_inference_s = np.sum(inference_times) / 1000
+    
     json_data = {
         'dataset': dataset_name,
         'total_images': len(dataset),
@@ -172,8 +176,10 @@ def evaluate_classification(checkpoint_path, data_dir, dataset_name="Test"):
             for i in range(len(unique_labels))
         },
         'timing': {
-            'average_inference_ms': float(np.mean(inference_times)),
-            'fps': float(1000 / np.mean(inference_times))
+            'average_prediction_duration_per_image_seconds': float(avg_inference_ms / 1000),
+            'total_prediction_duration_seconds': float(total_inference_s),
+            'average_inference_ms': float(avg_inference_ms),
+            'fps': float(1000 / avg_inference_ms)
         }
     }
     
@@ -181,6 +187,28 @@ def evaluate_classification(checkpoint_path, data_dir, dataset_name="Test"):
     with open(json_filename, 'w') as f:
         json.dump(json_data, f, indent=2)
     print(f"✓ Results saved: {json_filename}")
+    
+    # Save timing to separate CSV
+    timing_df = pd.DataFrame([{
+        'Metric': 'Average Prediction Duration (seconds/image)',
+        'Value': float(avg_inference_ms / 1000)
+    }, {
+        'Metric': 'Total Prediction Duration (seconds)',
+        'Value': float(total_inference_s)
+    }, {
+        'Metric': 'Average Inference (ms/image)',
+        'Value': float(avg_inference_ms)
+    }, {
+        'Metric': 'FPS',
+        'Value': float(1000 / avg_inference_ms)
+    }, {
+        'Metric': 'Total Images',
+        'Value': len(dataset)
+    }])
+    
+    timing_csv = f'classification_timing_{dataset_name.lower()}.csv'
+    timing_df.to_csv(timing_csv, index=False)
+    print(f"✓ Timing saved: {timing_csv}")
     
     # Confusion Matrix
     print("\nGenerating confusion matrix...")
