@@ -1,6 +1,0 @@
-Metric,Value
-Average Prediction Duration (seconds/image),0.7391850887200772
-Total Prediction Duration (seconds),403.5950584411621
-Average Inference (ms/image),739.1850887200771
-FPS,1.3528411425770672
-Total Images,546.0
