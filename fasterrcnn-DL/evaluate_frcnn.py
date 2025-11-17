@@ -1,29 +1,32 @@
 # evaluate_frcnn.py
+
 """
-Evaluate Faster R-CNN on AgroPest-12 using mAP@0.5.
+Evaluate Faster R-CNN on AgroPest-12 validation set using mAP@0.5.
+Prints per-class Precision, Recall, AP, F1, Accuracy and overall scores.
 """
 
 import os
-import torch
-import torchvision
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from torchvision.transforms import functional as F
-from torch.utils.data import Dataset, DataLoader
 import cv2
 import numpy as np
+import torch
+import torchvision
+from torch.utils.data import Dataset, DataLoader
+from torchvision.transforms import functional as F
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from tqdm import tqdm
 
-# Dataset paths
+# Paths
 DATA_ROOT = "../data"
 VAL_IMG = os.path.join(DATA_ROOT, "valid", "images")
 VAL_LBL = os.path.join(DATA_ROOT, "valid", "labels")
 
-NUM_CLASSES = 13
+# Settings
+NUM_CLASSES = 13   # 0 = background, 1–12 = actual classes
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 CHECKPOINT_PATH = "../results/fasterrcnn/fasterrcnn_final.pth"
+IOU_THRESH = 0.5
 
 CLASS_NAMES = [
-    "Background",
     "Ants",
     "Bees",
     "Beetles",
@@ -49,9 +52,9 @@ class YOLODataset(Dataset):
         return len(self.files)
 
     def __getitem__(self, idx):
-        filename = self.files[idx]
-        img_path = os.path.join(self.img_dir, filename)
-        lbl_path = os.path.join(self.lbl_dir, filename.replace(".jpg", ".txt"))
+        fname = self.files[idx]
+        img_path = os.path.join(self.img_dir, fname)
+        lbl_path = os.path.join(self.lbl_dir, fname.replace(".jpg", ".txt"))
 
         img = cv2.imread(img_path)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -70,15 +73,20 @@ class YOLODataset(Dataset):
                 x2 = (xc + bw / 2) * w
                 y2 = (yc + bh / 2) * h
                 boxes.append([x1, y1, x2, y2])
-                labels.append(int(c) + 1)  # shift by +1
+                labels.append(int(c) + 1)
 
         img_tensor = F.to_tensor(img)
 
-        target = {
-            "boxes": torch.tensor(boxes, dtype=torch.float32),
-            "labels": torch.tensor(labels, dtype=torch.int64),
-        }
+        if len(boxes) == 0:
+            b = torch.zeros((0, 4), dtype=torch.float32)
+        else:
+            b = torch.tensor(boxes, dtype=torch.float32)
 
+        target = {
+            "boxes": b,
+            "labels": torch.tensor(labels, dtype=torch.int64),
+            "image_id": torch.tensor([idx]),
+        }
         return img_tensor, target
 
 
@@ -103,105 +111,165 @@ def load_model():
     return model
 
 
-def iou(boxA, boxB):
-    x1 = max(boxA[0], boxB[0])
-    y1 = max(boxA[1], boxB[1])
-    x2 = min(boxA[2], boxB[2])
-    y2 = min(boxA[3], boxB[3])
+def box_iou(box1, box2):
+    x1 = np.maximum(box1[0], box2[:, 0])
+    y1 = np.maximum(box1[1], box2[:, 1])
+    x2 = np.minimum(box1[2], box2[:, 2])
+    y2 = np.minimum(box1[3], box2[:, 3])
 
-    if x2 < x1 or y2 < y1:
-        return 0.0
-
-    inter = (x2 - x1) * (y2 - y1)
-    areaA = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
-    areaB = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
-    return inter / (areaA + areaB - inter)
+    inter = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+    area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    area2 = (box2[:, 2] - box2[:, 0]) * (box2[:, 3] - box2[:, 1])
+    union = area1 + area2 - inter + 1e-8
+    return inter / union
 
 
-def evaluate(model, loader, iou_thresh=0.5):
-    all_preds = {i: [] for i in range(NUM_CLASSES)}
-    all_gts = {i: [] for i in range(NUM_CLASSES)}
+def evaluate():
+    model = load_model()
+    dataset = YOLODataset(VAL_IMG, VAL_LBL)
+    loader = DataLoader(dataset, batch_size=1, collate_fn=collate_fn)
 
-    for imgs, targets in tqdm(loader, desc="Evaluating"):
-        imgs = [img.to(DEVICE) for img in imgs]
+    preds_by_class = {c: [] for c in range(1, NUM_CLASSES)}
+    gt_counts = {c: 0 for c in range(1, NUM_CLASSES)}
+    gt_meta = []
+
+    for img_idx, (imgs, targets) in enumerate(tqdm(loader, desc="Evaluating")):
+        img = imgs[0].to(DEVICE)
+        target = targets[0]
+
+        gtb = target["boxes"].numpy()
+        gtl = target["labels"].numpy()
+        per_image = {}
+
+        for c in range(1, NUM_CLASSES):
+            mask = (gtl == c)
+            boxes_c = gtb[mask]
+            gt_counts[c] += len(boxes_c)
+            per_image[c] = {"boxes": boxes_c, "matched": np.zeros(len(boxes_c), bool)}
+
+        gt_meta.append(per_image)
 
         with torch.no_grad():
-            outputs = model(imgs)
+            out = model([img])[0]
 
-        for out, gt in zip(outputs, targets):
-            pred_boxes = out["boxes"].cpu().numpy().tolist()
-            pred_scores = out["scores"].cpu().numpy().tolist()
-            pred_labels = out["labels"].cpu().numpy().tolist()
+        boxes = out["boxes"].cpu().numpy()
+        scores = out["scores"].cpu().numpy()
+        labels = out["labels"].cpu().numpy()
 
-            gt_boxes = gt["boxes"].numpy().tolist()
-            gt_labels = gt["labels"].numpy().tolist()
+        for box, score, label in zip(boxes, scores, labels):
+            label = int(label)
+            if label == 0 or label >= NUM_CLASSES:
+                continue
+            preds_by_class[label].append(
+                {"image_idx": img_idx, "box": box, "score": float(score)}
+            )
 
-            for b, s, c in zip(pred_boxes, pred_scores, pred_labels):
-                if c < len(all_preds):
-                    all_preds[c].append({"bbox": b, "score": s})
+    rows = []
+    ap_values = []
 
-            for b, c in zip(gt_boxes, gt_labels):
-                if c < len(all_gts):
-                    all_gts[c].append({"bbox": b})
+    total_tp = 0
+    total_fp = 0
+    total_fn = 0
 
-    aps = {}
-    for c in range(1, NUM_CLASSES):  # skip background
-        preds = sorted(all_preds[c], key=lambda x: x["score"], reverse=True)
-        gts = all_gts[c]
+    for c in range(1, NUM_CLASSES):
+        preds = preds_by_class[c]
+        n_gt = gt_counts[c]
 
-        if len(gts) == 0:
-            aps[CLASS_NAMES[c]] = 0.0
+        if n_gt == 0:
+            rows.append({
+                "Class": CLASS_NAMES[c-1],
+                "Precision": 0, "Recall": 0, "AP": np.nan, "F1": 0, "Accuracy": 0
+            })
             continue
 
+        if len(preds) == 0:
+            total_fn += n_gt
+            rows.append({
+                "Class": CLASS_NAMES[c-1],
+                "Precision": 0, "Recall": 0, "AP": 0, "F1": 0, "Accuracy": 0
+            })
+            ap_values.append(0)
+            continue
+
+        preds = sorted(preds, key=lambda x: x["score"], reverse=True)
         tp = np.zeros(len(preds))
         fp = np.zeros(len(preds))
-        matched = set()
 
         for i, p in enumerate(preds):
-            best_iou = 0
-            best_j = -1
+            img_idx = p["image_idx"]
+            box = p["box"]
 
-            for j, g in enumerate(gts):
-                iou_val = iou(p["bbox"], g["bbox"])
-                if iou_val > best_iou:
-                    best_iou = iou_val
-                    best_j = j
+            gts = gt_meta[img_idx][c]["boxes"]
+            matched = gt_meta[img_idx][c]["matched"]
 
-            if best_iou >= iou_thresh and best_j not in matched:
+            if len(gts) == 0:
+                fp[i] = 1
+                continue
+
+            ious = box_iou(box, gts)
+            best = int(np.argmax(ious))
+            best_iou = ious[best]
+
+            if best_iou >= IOU_THRESH and not matched[best]:
                 tp[i] = 1
-                matched.add(best_j)
+                matched[best] = True
             else:
                 fp[i] = 1
 
-        tp_cum = np.cumsum(tp)
-        fp_cum = np.cumsum(fp)
-        recalls = tp_cum / len(gts)
-        precisions = tp_cum / (tp_cum + fp_cum)
+        tp_c = np.cumsum(tp)
+        fp_c = np.cumsum(fp)
 
-        ap = 0.0
+        recalls = tp_c / (n_gt + 1e-8)
+        precisions = tp_c / (tp_c + fp_c + 1e-8)
+
+        ap = 0
         for t in np.linspace(0, 1, 11):
-            p = np.max(precisions[recalls >= t]) if np.sum(recalls >= t) > 0 else 0
-            ap += p / 11
+            mask = recalls >= t
+            if np.any(mask):
+                ap += np.max(precisions[mask]) / 11
+        ap_values.append(ap)
 
-        aps[CLASS_NAMES[c]] = ap
+        tp_final = tp_c[-1]
+        fp_final = fp_c[-1]
+        fn_final = n_gt - tp_final
 
-    mean_ap = np.mean(list(aps.values()))
-    return mean_ap, aps
+        total_tp += tp_final
+        total_fp += fp_final
+        total_fn += fn_final
 
+        prec = tp_final / (tp_final + fp_final + 1e-8)
+        rec = tp_final / (n_gt + 1e-8)
+        f1 = (2 * prec * rec) / (prec + rec + 1e-8)
+        acc = tp_final / (tp_final + fp_final + fn_final + 1e-8)
 
-def main():
-    ds = YOLODataset(VAL_IMG, VAL_LBL)
-    loader = DataLoader(ds, batch_size=1, shuffle=False, collate_fn=collate_fn)
+        rows.append({
+            "Class": CLASS_NAMES[c-1],
+            "Precision": prec,
+            "Recall": rec,
+            "AP": ap,
+            "F1": f1,
+            "Accuracy": acc,
+        })
 
-    model = load_model()
+    mAP = float(np.nanmean(ap_values)) if len(ap_values) else np.nan
 
-    mean_ap, aps = evaluate(model, loader)
+    overall_prec = total_tp / (total_tp + total_fp + 1e-8)
+    overall_rec = total_tp / (total_tp + total_fn + 1e-8)
+    overall_f1 = (2 * overall_prec * overall_rec) / (overall_prec + overall_rec + 1e-8)
+    overall_acc = total_tp / (total_tp + total_fp + total_fn + 1e-8)
 
-    print("\nmAP@0.5 =", round(mean_ap, 4))
-    print("\nPer-class AP:")
-    for cls, ap in aps.items():
-        print(f"{cls:15s}: {ap:.4f}")
+    rows.append({"Class": "mAP", "Precision": np.nan, "Recall": np.nan, "AP": mAP, "F1": np.nan, "Accuracy": np.nan})
+    rows.append({"Class": "Overall", "Precision": overall_prec, "Recall": overall_rec, "AP": mAP, "F1": overall_f1, "Accuracy": overall_acc})
+
+    try:
+        import pandas as pd
+        df = pd.DataFrame(rows)
+        print(df.to_string(index=False, float_format=lambda x: f"{x:.6f}"))
+    except ImportError:
+        print("Class       Precision   Recall   AP      F1      Accuracy")
+        for r in rows:
+            print(f"{r['Class']:12s} {r['Precision']:.6f} {r['Recall']:.6f} {r['AP']:.6f} {r['F1']:.6f} {r['Accuracy']:.6f}")
 
 
 if __name__ == "__main__":
-    main()
+    evaluate()
