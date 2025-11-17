@@ -17,7 +17,6 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 CHECKPOINT_PATH = "../results/fasterrcnn/fasterrcnn_final.pth"
 
 CLASS_NAMES = [
-    "Background",
     "Ants",
     "Bees",
     "Beetles",
@@ -78,10 +77,10 @@ def run_inference(model, img_path, score_thresh=0.5, top_k=10):
             cls_id = int(labels[idx])
             box = boxes[idx].tolist()
 
-            if 0 <= cls_id < len(CLASS_NAMES):
-                name = CLASS_NAMES[cls_id]
+            if cls_id == 0:
+                name = "Background"
             else:
-                name = str(cls_id)
+                name = CLASS_NAMES[cls_id - 1]
 
             x1, y1, x2, y2 = [round(v, 1) for v in box]
             print(f"{rank+1}. {name:12s}  score={score:.3f}  box=({x1}, {y1}, {x2}, {y2})")
@@ -91,14 +90,13 @@ def run_inference(model, img_path, score_thresh=0.5, top_k=10):
         if score < score_thresh:
             continue
 
+        cls_id = int(label)
+        if cls_id == 0:
+            continue
+
         kept += 1
         x1, y1, x2, y2 = box.int().tolist()
-        cls_id = int(label)
-
-        if 0 <= cls_id < len(CLASS_NAMES):
-            cls_name = CLASS_NAMES[cls_id]
-        else:
-            cls_name = str(cls_id)
+        cls_name = CLASS_NAMES[cls_id - 1]
 
         cv2.rectangle(img_bgr, (x1, y1), (x2, y2), (0, 255, 0), 2)
         cv2.putText(
