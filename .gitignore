@@ -209,3 +209,4 @@ __marimo__/
 *.cache
 /dataset
 */runs
+*.pdf

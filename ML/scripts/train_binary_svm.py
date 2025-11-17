@@ -32,7 +32,7 @@ def initialize_model():
     linear_svm = LinearSVC(
         penalty='l2',
         loss='squared_hinge',
-        dual=True,
+        dual=False,
         tol=0.0001,
         C=0.001,
         class_weight='balanced',

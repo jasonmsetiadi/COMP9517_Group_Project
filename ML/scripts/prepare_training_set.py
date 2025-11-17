@@ -19,9 +19,13 @@ TRAIN_PROPOSALS_DIR = os.path.join(TRAIN_DATA_DIR, 'proposals')
 TRAIN_OVERLAP_DIR = os.path.join(TRAIN_DATA_DIR, 'overlap')
 
 
-def negative_bbox_random_sampling(img_path, class_id, num_pos, threshold=0.3):
+def negative_bbox_random_sampling(img_path, labels, class_id, num_pos, threshold=0.3):
+    # hard negative mining (if no positive samples, use ground truth boxes as negative samples)
+    if num_pos == 0:
+        return [label['box'] for label in labels]
+    
     # define the number of negative samples
-    num_samples = 1 if num_pos == 0 else min(int(num_pos * 0.1), 1)
+    num_samples = min(int(num_pos * 0.1), 1)
 
     # get indices of negative samples
     file_name = os.path.basename(img_path)
@@ -47,14 +51,13 @@ def negative_bbox_random_sampling(img_path, class_id, num_pos, threshold=0.3):
     return negative_samples
 
 
-def positive_bbox_sampling(img_path, labels, class_id, img_width, img_height, threshold=1):
+def positive_bbox_sampling(img_path, labels, class_id, threshold=1):
     positive_samples = []
 
     # get positive samples from labels
     for label in labels:
         if label['label'] == class_id:
-            pos_box = yolo_to_iou_format(label['box'], img_width, img_height)
-            positive_samples.append(pos_box)
+            positive_samples.append(label['box'])
 
     # get indices of negative samples
     file_name = os.path.basename(img_path)
@@ -83,22 +86,24 @@ def get_training_data(data, class_id, run_dir, region_size=(96, 96), save=True):
         img_path, bboxes = data[i]
         img = cv2.imread(img_path)
         img_height, img_width = img.shape[:2]
+        for box in bboxes:
+            box['box'] = yolo_to_iou_format(box['box'], img_width, img_height)
 
         # positive samples
-        pos_boxes = positive_bbox_sampling(img_path, bboxes, class_id, img_width, img_height, threshold=0.7)
+        pos_boxes = positive_bbox_sampling(img_path, bboxes, class_id, threshold=0.8)
         num_pos += len(pos_boxes)
         for pos_box in pos_boxes:
             warp = warp_region(img, pos_box, output_size=region_size)
-            features = extract_features(warp)
+            features = extract_features(warp, use_sift=True, use_hog=False, use_lbp=True, use_color=True)
             X.append(features)
             y.append(1)
 
         # negative samples
-        neg_boxes = negative_bbox_random_sampling(img_path, class_id, len(pos_boxes))
+        neg_boxes = negative_bbox_random_sampling(img_path, bboxes, class_id, len(pos_boxes))
         num_neg += len(neg_boxes)
         for neg_box in neg_boxes:
             warp = warp_region(img, neg_box, output_size=region_size)
-            features = extract_features(warp)
+            features = extract_features(warp, use_sift=True, use_hog=False, use_lbp=True, use_color=True)
             X.append(features)
             y.append(0)
 
@@ -183,6 +188,6 @@ if __name__ == "__main__":
     for class_name, class_id, total, pos, neg in results:
         print(
             f" - {class_name} (ID: {class_id}): {total} samples "
-            f"(positives: {pos}, negatives: {neg})"
+            f"(positives: {pos/total*100:.2f}%, negatives: {neg/total*100:.2f}%)"
         )
     print(f"Run ID: {run_id}")
