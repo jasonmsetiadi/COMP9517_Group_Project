@@ -16,3 +16,15 @@ __pycache__/
 
 # Ignore system files
 .DS_Store
+# Marimo
+marimo/_static/
+marimo/_lsp/
+__marimo__/
+.DS_Store
+*.cache
+/dataset
+*/runs
+*.pdf
+*.pt
+*.txt
+/DL-yolov8/all_test_results/bounded images

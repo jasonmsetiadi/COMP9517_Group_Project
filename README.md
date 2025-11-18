@@ -1,74 +1,44 @@
-# COMP9517_Group_Project
+# COMP9517 Crop Pest Detection
 
-Currently the directory structure should look like this
-```bash   
-COMP9517_Group_Project/
-│
-├── ML-HOG_and_RandomForest/
-│   ├── README.md
-│   ├── crop_yolo.py
-│   ├── src/
-│   │   ├── train_classifier.py
-│   │   ├── evaluate_classifier.py
-│   │   ├── sliding_window_detector.py
-│   |   ├── tools/
-│   |   │   ├── extract_features.py
-│   |   │   ├── helpers.py
-│   │   |   ├── nms.py
-│   └── .gitignore
-```
+## Team Members
 
-# Steps to Run Code
-Step 0: Transfer the raw images into a folder called **archive** in the **ML-HOG_and_RandomForest** directory which should have the following format as shown below.
+| Name | Student ID | Responsibilities | Contact |
+|------|-----------|------------------|---------|
+| Justine | z5423358 |  | [siyeon.kim@student.unsw.edu.au] |
+| Ben | z5360027 |  | [b.laphai@student.unsw.edu.au] |
+| Jason | z5611110 |  | [jason.setiadi@unsw.edu.au] |
+| Mike | z5698637 |  | [xiaojun.guo@student.unsw.edu.au] |
+| Michael | z5540434 |  | [feiyang.wang@student.unsw.edu.au] |
 
+## Setup
+
+### Requirements
+- Python 3.8+
+- CUDA 11.0+ (for GPU acceleration)
+- See requirements.txt for dependencies
+
+### Installation
 ```bash
-COMP9517_Group_Project/
-│
-├── ML-HOG_and_RandomForest/
-    ├── archive/
-│       ├── train/
-│         ├── images/
-│         └── labels/
-│       ├── valid/
-│       │   ├── images/
-│       │   └── labels/
-│       ├── test/
-│       │   ├── images/
-│       │   └── labels/
-│   └── data.yaml
-│   ├── README.md
-│   ├── crop_yolo.py
-│   ├── src/
-│   │   ├── train_classifier.py
-│   │   ├── evaluate_classifier.py
-│   │   ├── sliding_window_detector.py
-│   |   ├── tools/
-│   |   │   ├── extract_features.py
-│   |   │   ├── helpers.py
-│   │   |   ├── nms.py
-│   └── .gitignore
-```
-Step 1: Install packages
-```bash
-pip install opencv-python scikit-image scikit-learn matplotlib pyyaml joblib
+git clone <repo-url>
+pip install -r requirements.txt
 ```
 
-Step 2: In the ML-HOG_and_RandomForest directory, run the following to crop the images using the YOLO for training:
-```bash
-python crop_yolo.py
-```
+### Dataset Setup
 
-Step 3: Now go to the **ML-HOG_and_RandomForest/src** directory and run the following to train the Random Forest classifier model with the cropped images
-```bash
-python train_classifier.py
-```
-This should create a folder in the **ML-HOG_and_RandomForest/src** called models and save model to **ML-HOG_and_RandomForest/src/models/random_forest_crops.pkl**
+- Download the dataset from [Kaggle: AgroPest-12 Dataset](https://www.kaggle.com/datasets/rupankarmajumdar/crop-pests-dataset).
+- Labels are provided in YOLO format:
+  - Each label line follows: `class_id x_center y_center width height`
+  - All values are normalized between 0 and 1, where:
+    - `x_center` and `y_center` represent the center of the bounding box (as a fraction of image width and height, respectively).
+    - `width` and `height` are the size of the bounding box (as a fraction of image width and height).
 
-Step 4: Run the following in the **ML-HOG_and_RandomForest/src** directory to evaluate the classifier model using the original images
-```bash
-python evaluate_classifier.py
-```
-Step 5: Run the following in the **ML-HOG_and_RandomForest/src** to run the sliding window detector with the results displayed in the src/results folder.
-```bash
-python sliding_window_detector.py
-```
+## Quick Start
+
+## Results
+Key results are stored in results/:
+- metrics/ - Quantitative evaluation metrics
+- visualizations/ - Plots and figures for report
+- explanations/ - Explainability outputs
+
+## Citation
+[List key papers and tools used]
