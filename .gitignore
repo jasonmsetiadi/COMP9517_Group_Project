@@ -210,3 +210,7 @@ __marimo__/
 /dataset
 */runs
 *.pdf
+*.png
+*.jpg
+*.pt
+*.txt
