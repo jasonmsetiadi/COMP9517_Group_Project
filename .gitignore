@@ -210,7 +210,6 @@ __marimo__/
 /dataset
 */runs
 *.pdf
-*.png
-*.jpg
 *.pt
 *.txt
+/DL-yolov8/all_test_results/bounded images
