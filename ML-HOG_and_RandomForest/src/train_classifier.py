@@ -3,8 +3,9 @@ from sklearn.ensemble import RandomForestClassifier
 from imblearn.over_sampling import RandomOverSampler
 from tools.helpers import load_cropped_dataset
 from tools.extract_features import extract_combined_features
-import joblib
 import numpy as np
+import joblib
+
 
 
 # Paths to cropped images

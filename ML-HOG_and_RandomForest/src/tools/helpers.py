@@ -2,7 +2,7 @@ import os
 import cv2
 import yaml
 
-# load CROPPED images and their class labels
+# load cropped images and their class labels
 def load_cropped_dataset(base_path):
     class_names = sorted(os.listdir(base_path))
     X = []
@@ -19,7 +19,7 @@ def load_cropped_dataset(base_path):
     return X, y, class_names
 
 
-# load FULL images and class labels from YOLO label files
+# load full images and class labels from YOLO label files
 def load_full_images(img_folder, label_folder):
 
     class_names = load_class_names("../archive/data.yaml")
@@ -54,9 +54,6 @@ def load_full_images(img_folder, label_folder):
 
 # load class names from data.yaml
 def load_class_names(yaml_path):
-    """
-    Load class names from a YOLO-style data.yaml file.
-    """
     with open(yaml_path) as f:
         data = yaml.safe_load(f)
     return data['names']

@@ -16,7 +16,7 @@ CONF_THRESHOLD = 0.5
 
 # Load trained model and class names
 clf = joblib.load(MODEL_PATH)
-class_names = load_class_names("../archive/data.yaml")  # returns list of class names
+class_names = load_class_names("../archive/data.yaml")  
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -26,7 +26,7 @@ def sliding_window(image, step_size=32, window_size=(128,128)):
         for x in range(0, image.shape[1] - window_size[0] + 1, step_size):
             yield (x, y, image[y:y + window_size[1], x:x + window_size[0]])
 
-# Detect insects on an image
+# detect insects on an image
 def detect_insects(image):
     bboxes = []
     scores = []

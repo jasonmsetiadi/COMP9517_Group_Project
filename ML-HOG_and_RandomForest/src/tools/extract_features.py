@@ -25,7 +25,7 @@ def extract_hog_features(image_list):
 
     return np.array(features)
 
-# extract HSV color histograms for a list of images
+# extract hsv color histograms for a list of images
 def extract_color_hist_features(image_list, bins=16):
     features = []
     for img in image_list:
@@ -38,7 +38,7 @@ def extract_color_hist_features(image_list, bins=16):
         features.append(np.array(hist))
     return np.array(features)
 
-# combine HOG and color histograms for each image
+# combine hog and color histograms for each image
 def extract_combined_features(image_list):
     hog_feats = extract_hog_features(image_list)
     color_feats = extract_color_hist_features(image_list)
