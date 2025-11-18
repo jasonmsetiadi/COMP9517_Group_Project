@@ -1,12 +1,10 @@
-# src/sliding_window_detector.py
-
 import os
 import cv2
 import joblib
 import numpy as np
 from tools.extract_features import extract_combined_features
 from tools.helpers import load_class_names
-from tools.nms import non_max_suppression  # make sure you have this
+from tools.nms import non_max_suppression 
 
 # Paths and parameters
 MODEL_PATH = "models/random_forest_crops.pkl"  # trained on cropped RGB images
@@ -24,7 +22,6 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # sliding window generator
 def sliding_window(image, step_size=32, window_size=(128,128)):
-    """Yield (x, y, window)"""
     for y in range(0, image.shape[0] - window_size[1] + 1, step_size):
         for x in range(0, image.shape[1] - window_size[0] + 1, step_size):
             yield (x, y, image[y:y + window_size[1], x:x + window_size[0]])
@@ -52,7 +49,7 @@ def detect_insects(image):
     if len(bboxes) == 0:
         return [], [], []
 
-    # Apply Non-Maximum Suppression
+    # apply non maximum suppression
     final_boxes, final_scores, final_classes = non_max_suppression(
         np.array(bboxes), np.array(scores), np.array(predicted_classes), overlapThresh=0.3
     )
@@ -84,4 +81,4 @@ for img_file in os.listdir(TEST_IMG_DIR):
     cv2.imwrite(os.path.join(OUTPUT_DIR, img_file), image)
     print(f"Processed {img_file}, {len(bboxes)} insects detected.")
 
-print("Detection complete. Check the 'results/' folder.")
+print("Detection complete,check the 'src/results/' folder")
