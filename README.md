@@ -1,7 +1,7 @@
 # COMP9517_Group_Project
 
 Currently the directory structure should look like this
-
+```bash   
 COMP9517_Group_Project/
 │
 ├── ML-HOG_and_RandomForest/
@@ -16,13 +16,14 @@ COMP9517_Group_Project/
 │   |   │   ├── helpers.py
 │   │   |   ├── nms.py
 │   └── .gitignore
+```
 
 # Steps to Run Code
 Step 0: Transfer the 
 
 
 Currently the directory structure should look like this
-
+```bash
 COMP9517_Group_Project/
 │
 ├── ML-HOG_and_RandomForest/
@@ -48,7 +49,7 @@ COMP9517_Group_Project/
 │   |   │   ├── helpers.py
 │   │   |   ├── nms.py
 │   └── .gitignore
-
+```
 Step 1: Install packages
 ```bash
 pip install opencv-python scikit-image scikit-learn matplotlib pyyaml joblib
