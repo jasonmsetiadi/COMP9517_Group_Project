@@ -19,10 +19,8 @@ COMP9517_Group_Project/
 ```
 
 # Steps to Run Code
-Step 0: Transfer the 
+Step 0: Transfer the raw images into a folder called **archive** in the **ML-HOG_and_RandomForest** directory which should have the following format as shown below.
 
-
-Currently the directory structure should look like this
 ```bash
 COMP9517_Group_Project/
 │
@@ -60,14 +58,17 @@ Step 2: In the ML-HOG_and_RandomForest directory, run the following to crop the 
 python crop_yolo.py
 ```
 
-Step 3: Now go to the **ML-HOG_and_RandomForest/src** directory and run the following to train the Random Forest model with the cropped images
+Step 3: Now go to the **ML-HOG_and_RandomForest/src** directory and run the following to train the Random Forest classifier model with the cropped images
 ```bash
 python train_classifier.py
 ```
 This should create a folder in the **ML-HOG_and_RandomForest/src** called models and save model to **ML-HOG_and_RandomForest/src/models/random_forest_crops.pkl**
 
-Step 4: Run the following in the **ML-HOG_and_RandomForest/src** directory to evaluate the model using the original images
+Step 4: Run the following in the **ML-HOG_and_RandomForest/src** directory to evaluate the classifier model using the original images
 ```bash
-python train_classifier.py
+python evaluate_classifier.py
 ```
-
+Step 5: Run the following in the **ML-HOG_and_RandomForest/src** to run the sliding window detector with the results displayed in the src/results folder.
+```bash
+python sliding_window_detector.py
+```
