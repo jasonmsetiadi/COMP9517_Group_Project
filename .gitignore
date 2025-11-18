@@ -1,11 +1,14 @@
 # Ignore cropped images
-ML-Benjamin/data/crops/
+ML-HOG_and_RandomForest/data/crops/
 
 # Ignore archive dataset
-ML-Benjamin/archive/
+ML-HOG_and_RandomForest/archive/
 
-# Ignore model files if you want (optional)
-ML-Benjamin/src/models/
+# Ignore model files 
+ML-HOG_and_RandomForest/src/models/
+
+# Ignore readme
+README.md
 
 # Ignore Python cache files
 __pycache__/

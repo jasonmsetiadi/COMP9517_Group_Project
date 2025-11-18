@@ -8,15 +8,9 @@ with open("archive/data.yaml") as f:
 
 class_names = data['names']
 
+# Crops insects from images using YOLO labels and saves them in class-specific folder
 def crop_yolo_set(img_dir, label_dir, save_dir):
-    """
-    Crop insects from images using YOLO labels and save them in class-specific folders.
-    
-    Args:
-        img_dir: path to images
-        label_dir: path to YOLO labels (.txt files)
-        save_dir: output directory for cropped images
-    """
+   
     os.makedirs(save_dir, exist_ok=True)
     for cls in class_names:
         os.makedirs(os.path.join(save_dir, cls), exist_ok=True)
