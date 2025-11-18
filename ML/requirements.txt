@@ -1,4 +1,0 @@
-opencv-contrib-python
-matplotlib
-scikit-image
-scikit-learn
