@@ -50,7 +50,7 @@ COMP9517_Group_Project/
 ```
 Step 1: Install packages
 ```bash
-pip install opencv-python scikit-image scikit-learn matplotlib pyyaml joblib
+pip install -r requirements.txt
 ```
 
 Step 2: In the ML-HOG_and_RandomForest directory, run the following to crop the images using the YOLO for training:
