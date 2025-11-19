@@ -1,46 +1,64 @@
 import os
+import numpy as np
+import joblib
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.decomposition import PCA
 from imblearn.over_sampling import RandomOverSampler
 from tools.helpers import load_cropped_dataset
 from tools.extract_features import extract_combined_features
-import numpy as np
-import joblib
 
 
+# Paths
+train_path = "../data/train"
+val_path   = "../data/valid"
 
-# Paths to cropped images
-train_path = "../data/crops/train"
-val_path   = "../data/crops/val"
 
-# Load cropped dataset
+# Load dataset
 X_train_imgs, y_train, class_names = load_cropped_dataset(train_path)
-X_val_imgs, y_val, _ = load_cropped_dataset(val_path)
+X_val_imgs, y_val, _              = load_cropped_dataset(val_path)
+
 print(f"Training samples: {len(X_train_imgs)}, Validation samples: {len(X_val_imgs)}")
 
-# handle class imbalance
-X_train_flat = [img.flatten() for img in X_train_imgs]
+
+# Extract features 
+X_train_features = extract_combined_features(X_train_imgs)
+X_val_features   = extract_combined_features(X_val_imgs)
+
+print("Raw feature dimension:", X_train_features.shape[1])
+
+
+# Reduce feature dimension using PCA
+pca = PCA(n_components=200, random_state=42)
+X_train_pca = pca.fit_transform(X_train_features)
+X_val_pca   = pca.transform(X_val_features)
+
+print("Feature dimension after PCA:", X_train_pca.shape[1])
+
+
 ros = RandomOverSampler(random_state=42)
-X_train_res, y_train_res = ros.fit_resample(X_train_flat, y_train)
+X_train_balanced, y_train_balanced = ros.fit_resample(X_train_pca, y_train)
 
-X_train_imgs = [np.array(x, dtype=np.uint8).reshape(128,128,3) for x in X_train_res]
+print("Balanced training samples:", len(X_train_balanced))
 
-# Extract combined features
-print("Extracting features...")
-X_train = extract_combined_features(X_train_imgs)
-X_val = extract_combined_features(X_val_imgs)
-print(f"Feature vector size: {X_train.shape[1]}")
-
-
-# Train Random Forest
+# train rf, lighter to prevent RAM issues)
 clf = RandomForestClassifier(
-    n_estimators=300,
+    n_estimators=120,      
+    max_depth=25,          
+    class_weight="balanced",
     random_state=42,
-    class_weight="balanced"
+    n_jobs=-1              
 )
-clf.fit(X_train, y_train_res)
 
-# Save model
+clf.fit(X_train_balanced, y_train_balanced)
+
 os.makedirs("models", exist_ok=True)
-model_path = "models/random_forest_crops.pkl"
-joblib.dump(clf, model_path)
+
+model_path = "models/random_forest.pkl"
+joblib.dump({
+    "model": clf,
+    "pca": pca,
+    "class_names": class_names
+}, model_path)
+
 print(f"Model saved to {model_path}")
+
