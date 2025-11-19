@@ -33,12 +33,12 @@ name2id = {name: i for i, name in enumerate(data_yaml["names"])}
 WEAK_CLASS_IDS = [name2id[n] for n in WEAK_CLASS_NAMES if n in name2id]
 
 print("\n==============================")
-print("弱类映射结果 (from data.yaml)")
+print("weakclass map: (from data.yaml)")
 for n in WEAK_CLASS_NAMES:
     if n in name2id:
         print(f"  {n} → ID {name2id[n]}")
     else:
-        print(f" 未在 data.yaml 中找到类名: {n}")
+        print(f" didn't find class in data: {n}")
 print("==============================\n")
 
 
@@ -56,44 +56,44 @@ for label_path in label_files:
         with open(label_path) as f:
             cls_ids = [int(line.split()[0]) for line in f if line.strip()]
         if any(cid in WEAK_CLASS_IDS for cid in cls_ids):
-            # 图像路径
+            # image path
             image_path = label_path.replace("/labels/", "/images/").rsplit(".", 1)[0] + ".jpg"
             weak_image_paths.append(image_path)
             for cid in cls_ids:
                 if cid in WEAK_CLASS_IDS:
                     counter[cid] += 1
     except Exception as e:
-        print(f"无法读取标签文件: {label_path} ({e})")
+        print(f"can't read label file: {label_path} ({e})")
 
-print("弱类样本统计：")
+print("weakclass statistics：")
 for cid in WEAK_CLASS_IDS:
     cname = list(name2id.keys())[cid]
     print(f"  {cname:<15} (ID {cid}): {counter[cid]} 张")
 
-print(f"\n总共找到含弱类的图像: {len(weak_image_paths)} 张")
+print(f"\nweakcalss amount: {len(weak_image_paths)} 张")
 
 if len(weak_image_paths) > 0:
-    print("示例样本路径（前5条）:")
+    print("first 5:")
     for p in weak_image_paths[:5]:
         print(" ", p)
 else:
-    print("未找到任何含弱类样本，请检查路径或ID映射。")
+    print("didn't find any weakclass")
 
-# 写出 balanced txt
+
 with open(balanced_txt_path, "w") as f:
     for p in weak_image_paths:
         f.write(p + "\n")
 
-print(f"\n过采样列表写入: {balanced_txt_path}\n")
+print(f"\nbalanced txt path: {balanced_txt_path}\n")
 
 
 model_path = os.path.join(PROJECT, BASE_RUN, "weights", "best.pt")
-assert os.path.exists(model_path), f"未找到模型权重: {model_path}"
+assert os.path.exists(model_path), f"didn't find weights: {model_path}"
 
 print("======================================================================")
-print("微调启动（从 best.pt 作为起点，非 resume 模式）")
-print(f"基础 run: {BASE_RUN}")
-print(f"新 run  : {NEW_RUN}")
+print("tuen start（stat with best.pt，no resume）")
+print(f"base run: {BASE_RUN}")
+print(f"new run  : {NEW_RUN}")
 print("======================================================================")
 
 model = YOLO(model_path)
@@ -121,6 +121,6 @@ results = model.train(
     resume=True
 )
 
-print("\n微调训练已启动，日志保存在：")
+print("\ntune start log path:：")
 print(f"   {os.path.join(PROJECT, NEW_RUN)}")
 print("======================================================================")
