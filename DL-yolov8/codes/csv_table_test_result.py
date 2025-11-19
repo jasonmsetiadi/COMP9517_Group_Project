@@ -27,7 +27,7 @@ def main():
         save=False
     )
 
-    print("评估完成，结果保存在：", metrics.save_dir)
+    print("result saved to：", metrics.save_dir)
 
     names = metrics.names
 

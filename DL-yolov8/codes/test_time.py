@@ -6,16 +6,15 @@ import yaml
 import os
 
 
-# ========== 需要你修改的部分 ==========
+
 MODEL_PATH = "runs/debug/agropest_yolov8n_fulltry3/weights/best.pt"
 TEST_DIR = "/Users/wang/9517/group_project/AgroPest-12/test"
 DATA_YAML  = "/Users/wang/9517/group_project/AgroPest-12/data.yaml"
-DEVICE = "mps"   # "cuda", "cpu" 也可
-# =======================================
+DEVICE = "mps"
+
 
 
 def count_images(dir_path):
-    """统计 test 目录中的图像数量"""
     exts = {".jpg", ".jpeg", ".png", ".bmp"}
     n = 0
     for root, _, files in os.walk(dir_path):
@@ -26,7 +25,6 @@ def count_images(dir_path):
 
 
 def main():
-    # 读取 data.yaml，拿到 test 集路径
     with open(DATA_YAML, "r") as f:
         data = yaml.safe_load(f)
 
@@ -40,8 +38,7 @@ def main():
 
     print("Start timing test inference…")
     t0 = time.time()
-
-    # 关键：用 val(split="test") 来测试推理速度
+    
     model.val(
         data=DATA_YAML,
         split="test",
@@ -59,7 +56,7 @@ def main():
     print(f"\nTotal prediction duration:  {total_test_time:.4f} seconds")
     print(f"Average per image:          {avg_per_image:.6f} seconds")
 
-    # 输出 JSON（和你组长一样的格式）
+
     result = {
         "average_prediction_duration_per_image_seconds": avg_per_image,
         "total_prediction_duration_seconds": total_test_time
