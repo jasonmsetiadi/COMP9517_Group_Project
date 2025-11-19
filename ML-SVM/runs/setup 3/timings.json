@@ -1,0 +1,19 @@
+{
+  "total_train_duration_seconds": 18.14075779914856,
+  "per_class_train_duration_seconds": {
+    "class_0": 1.6071012020111084,
+    "class_1": 1.2605350017547607,
+    "class_2": 1.2252271175384521,
+    "class_3": 1.366590976715088,
+    "class_4": 1.1416449546813965,
+    "class_5": 1.459705114364624,
+    "class_6": 1.4038479328155518,
+    "class_7": 2.6079518795013428,
+    "class_8": 1.2132301330566406,
+    "class_9": 1.4361257553100586,
+    "class_10": 1.7178778648376465,
+    "class_11": 1.7009198665618896
+  },
+  "average_prediction_duration_per_image_seconds": 0.9308077140605493,
+  "total_prediction_duration_seconds": 508.22101187705994
+}
