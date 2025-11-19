@@ -7,7 +7,7 @@ import numpy as np
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, PROJECT_ROOT)
 
-from src.eval import evaluate_map
+from src.eval import compute_all_metrics
 from src.utils import CLASS_TO_ID, load_label_data, yolo_to_iou_format
 
 if __name__ == "__main__":
@@ -75,7 +75,7 @@ if __name__ == "__main__":
             )
 
     metrics_path = os.path.join(RUN_DIR, "metrics.csv")
-    evaluate_map(
+    compute_all_metrics(
         detections,
         ground_truths,
         iou_threshold=args.iou_threshold,
