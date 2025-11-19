@@ -6,8 +6,8 @@ A comprehensive comparison of machine learning and deep learning approaches for 
 
 | Name | Student ID | Responsibilities | Contact |
 |------|-----------|------------------|---------|
-| Jason | z5611110 | HOG+SVM | [jason.setiadi@unsw.edu.au] |
-| Ben | z5360027 | HOG+RF | [b.laphai@student.unsw.edu.au] |
+| Jason | z5611110 | Selective Search+SVM | [jason.setiadi@unsw.edu.au] |
+| Ben | z5360027 | Sliding Window+RF | [b.laphai@student.unsw.edu.au] |
 | Justine | z5423358 | Faster-RCNN | [siyeon.kim@student.unsw.edu.au] |
 | Mike | z5698637 | EfficientDet | [xiaojun.guo@student.unsw.edu.au] |
 | Michael | z5540434 | YOLOv8 | [feiyang.wang@student.unsw.edu.au] |
@@ -17,8 +17,8 @@ A comprehensive comparison of machine learning and deep learning approaches for 
 ```
 COMP9517_Group_Project/
 ├── dataset/              # AgroPest-12 dataset (train/valid/test splits)
-├── ML-HOG-SVM/          # Machine Learning: Multiple features (HOG, SIFT, LBP, Color) + SVM classifier
-├── ML-HOG-RF/           # Machine Learning: Multiple features (HOG, SIFT, LBP, Color) + Random Forest classifier
+├── ML-SVM/          # Machine Learning: Selective Search + SVM classifier
+├── ML-RF/           # Machine Learning: Sliding Window + Random Forest classifier
 ├── DL-FasterRCNN/       # Deep Learning: Faster R-CNN detection model
 ├── DL-EfficientDet/     # Deep Learning: EfficientDet detection model
 └── DL-YOLOv8/           # Deep Learning: YOLOv8 detection model
@@ -73,15 +73,15 @@ COMP9517_Group_Project/
 
 Each approach stores its results in its respective directory:
 
-### ML-HOG-SVM
-- Results stored in `ML-HOG-SVM/runs/run_<timestamp>/`
+### ML-SVM
+- Results stored in `ML-SVM/runs/run_<timestamp>/`
   - `metrics.csv` - Evaluation metrics
   - `predictions/` - Detection outputs
   - `classes/` - Per-class models and features
 
-### ML-HOG-RF
-- Models: `ML-HOG-RF/src/models/random_forest_crops.pkl`
-- Results: `ML-HOG-RF/src/results/`
+### ML-RF
+- Models: `ML-RF/src/models/random_forest_crops.pkl`
+- Results: `ML-RF/src/results/`
 
 ### DL-FasterRCNN
 - Model checkpoints: `DL-FasterRCNN/results/fasterrcnn/`
