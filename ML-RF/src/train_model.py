@@ -8,24 +8,18 @@ from tools.helpers import load_cropped_dataset
 from tools.extract_features import extract_combined_features
 
 
-# Paths
 train_path = "../data/train"
-val_path   = "../data/valid"
-
-
-# Load dataset
+valid_path   = "../data/valid"
 X_train_imgs, y_train, class_names = load_cropped_dataset(train_path)
-X_val_imgs, y_val, _              = load_cropped_dataset(val_path)
+X_val_imgs, y_val, _ = load_cropped_dataset(valid_path)
 
 print(f"Training samples: {len(X_train_imgs)}, Validation samples: {len(X_val_imgs)}")
-
 
 # Extract features 
 X_train_features = extract_combined_features(X_train_imgs)
 X_val_features   = extract_combined_features(X_val_imgs)
 
-print("Raw feature dimension:", X_train_features.shape[1])
-
+print("raw feature dimension:", X_train_features.shape[1])
 
 # Reduce feature dimension using PCA
 pca = PCA(n_components=200, random_state=42)
@@ -38,7 +32,7 @@ print("Feature dimension after PCA:", X_train_pca.shape[1])
 ros = RandomOverSampler(random_state=42)
 X_train_balanced, y_train_balanced = ros.fit_resample(X_train_pca, y_train)
 
-print("Balanced training samples:", len(X_train_balanced))
+print("training samples:", len(X_train_balanced))
 
 # train rf, lighter to prevent RAM issues)
 clf = RandomForestClassifier(
@@ -61,4 +55,6 @@ joblib.dump({
 }, model_path)
 
 print(f"Model saved to {model_path}")
+
+
 
