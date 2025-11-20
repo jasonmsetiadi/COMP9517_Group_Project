@@ -8,7 +8,7 @@ COMP9517_Group_Project/
 │   ├── README.md
 │   ├── crop_sw.py
 │   ├── src/
-│   │   ├── train_classifier.py
+│   │   ├── train_model.py
 │   │   ├── evaluate_classifier.py
 │   │   ├── sliding_window_detector.py
 │   |   ├── tools/
@@ -39,7 +39,7 @@ COMP9517_Group_Project/
 │   ├── README.md
 │   ├── crop_sw.py
 │   ├── src/
-│   │   ├── train_classifier.py
+│   │   ├── train_model.py
 │   │   ├── evaluate_classifier.py
 │   │   ├── sliding_window_detector.py
 │   |   ├── tools/
@@ -99,7 +99,7 @@ COMP9517_Group_Project/
 │   ├── crop_sw.py
 │   │
 │   ├── src/
-│   │   ├── train_classifier.py
+│   │   ├── train_model.py
 │   │   ├── evaluate_classifier.py
 │   │   ├── sliding_window_detector.py
 │   │   └── tools/
@@ -113,7 +113,7 @@ COMP9517_Group_Project/
 
 Step 3: Now go to the **ML-RF/src** directory and run the following to train the Random Forest classifier model with the cropped images
 ```bash
-python train_classifier.py
+python train_model.py
 ```
 This should create a folder in the **ML-RF/src** called models and save model to **ML-RF/src/models/random_forest.pkl**
 
