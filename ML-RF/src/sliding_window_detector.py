@@ -6,68 +6,67 @@ from tools.extract_features import extract_combined_features
 from tools.helpers import load_class_names
 from tools.nms import non_max_suppression
 
-MODEL_PATH = "models/random_forest.pkl"
-TEST_IMG_DIR = "../archive/test/images"
-OUTPUT_DIR = "results"
-WINDOW_SIZE = 128
-STEP_SIZE = 32
-CONF_THRESHOLD = 0.5
-
-saved = joblib.load(MODEL_PATH)
+saved = joblib.load("models/random_forest.pkl")
 clf = saved["model"]
 pca = saved["pca"]
 class_names = saved["class_names"]
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs("results", exist_ok=True)
 
-def sliding_window(image, step_size, window_size):
-    h, w = image.shape[:2]
-    for y in range(0, h - window_size[1] + 1, step_size):
-        for x in range(0, w - window_size[0] + 1, step_size):
-            yield x, y, image[y:y + window_size[1], x:x + window_size[0]]
+def sliding_window(image):
+    for y in range(0, image.shape[0] - 128 + 1, 32):
+        for x in range(0, image.shape[1] - 128 + 1, 32):
+            yield x, y, image[y:y+128, x:x+128]
 
 def detect_insects(image):
-    bboxes, scores, classes = [], [], []
+    bboxes, scores, predicted_classes = [], [], []
 
-    for x, y, window in sliding_window(image, STEP_SIZE, (WINDOW_SIZE, WINDOW_SIZE)):
+    for x, y, window in sliding_window(image):
+        if window.shape[:2] != (128, 128):
+            continue
+
         feats = extract_combined_features([window])
-        feats = pca.transform(feats)
+        feats_pca = pca.transform(feats)
 
-        prob_vec = clf.predict_proba(feats)[0]
-        prob = np.max(prob_vec)
-        pred = np.argmax(prob_vec)
+        pred = clf.predict(feats_pca)[0]
+        prob = max(clf.predict_proba(feats_pca)[0])
 
-        if prob >= CONF_THRESHOLD:
-            bboxes.append([x, y, x + WINDOW_SIZE, y + WINDOW_SIZE])
+        if prob >= 0.5:
+            bboxes.append([x, y, x + 128, y + 128])
             scores.append(prob)
-            classes.append(pred)
+            predicted_classes.append(pred)
 
     if len(bboxes) == 0:
         return [], [], []
 
-    bboxes, scores, classes = non_max_suppression(
-        np.array(bboxes), np.array(scores), np.array(classes), overlapThresh=0.3
+    final_boxes, final_scores, final_classes = non_max_suppression(
+        np.array(bboxes), np.array(scores), np.array(predicted_classes), 0.3
     )
-    return bboxes, scores, classes
+    return final_boxes, final_scores, final_classes
 
-for img_file in os.listdir(TEST_IMG_DIR):
+for img_file in os.listdir("../archive/test/images"):
     if not img_file.endswith(".jpg"):
         continue
 
-    img = cv2.imread(os.path.join(TEST_IMG_DIR, img_file))
-    if img is None:
+    img_path = os.path.join("../archive/test/images", img_file)
+    image = cv2.imread(img_path)
+    if image is None:
         continue
 
-    bboxes, scores, preds = detect_insects(img)
+    bboxes, scores, classes = detect_insects(image)
 
     if len(bboxes) == 0:
+        print(f"{img_file}, 0 insects detected.")
         continue
 
-    for box, cls in zip(bboxes, preds):
+    for (box, cls) in zip(bboxes, classes):
         x1, y1, x2, y2 = box
-        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(img, class_names[cls], (x1, y1 - 5),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0,255,0), 2)
+        cv2.putText(image, class_names[cls], (x1, y1-5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
 
-    cv2.imwrite(os.path.join(OUTPUT_DIR, img_file), img)
- 'src/results/' folder")
+    cv2.imwrite(os.path.join("results", img_file), image)
+    print(f" {img_file}, {len(bboxes)} insects detected.")
+
+print("Detection complete, check the 'src/results/' folder")
+
