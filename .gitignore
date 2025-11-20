@@ -212,5 +212,6 @@ __marimo__/
 *.pkl
 *.pdf
 *.pt
+*.pth
 /DL-YOLOv8/all_test_results/bounded images
 /DL-YOLOv8/all_test_results/labels
