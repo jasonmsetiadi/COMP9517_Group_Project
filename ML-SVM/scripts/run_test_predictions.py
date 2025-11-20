@@ -14,6 +14,8 @@ import pickle
 from src.preprocessing import warp_region, extract_features
 from src.utils import ss_to_iou_format, compute_iou
 import cv2
+
+np.seterr(all="ignore")
 TEST_DATA_DIR = os.path.join(PROJECT_ROOT, '..', 'dataset', 'test')
 TEST_PROPOSAL_DIR = os.path.join(TEST_DATA_DIR, 'proposals')
 
@@ -167,6 +169,8 @@ def load_trained_svm_models(model_dirs):
     trained_models = [pickle.load(open(model, "rb")) for model in trained_models]
     return trained_models
 
+
+def _init_worker(classes_dir, predictions_dir, score_threshold, nms_threshold):
     global _CLASS_SVMS, _PREDICTIONS_DIR, _SCORE_THRESHOLD, _NMS_THRESHOLD
     _CLASS_SVMS = load_trained_svm_models(classes_dir)
     _PREDICTIONS_DIR = predictions_dir
